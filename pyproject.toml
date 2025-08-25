@@ -1,0 +1,157 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bend"
+version = "0.1.0"
+description = "Benchmark of DNA Language Models"
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+authors = [
+    {name = "Frederikke Isa Marin"},
+    {name = "Felix Teufel"},
+    {name = "Marc Horlacher"},
+    {name = "Dennis Madsen"},
+    {name = "Dennis Pultz"},
+    {name = "Ole Winther"},
+    {name = "Wouter Boomsma"},
+]
+maintainers = [
+    {name = "Frederikke Isa Marin"},
+]
+keywords = ["bioinformatics", "dna", "language-models", "benchmarking", "genomics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.8,<=3.11"
+dependencies = [
+    "biopython>=1.81",
+    "pandas>=2.0.2",
+    "scikit-learn>=1.2.2",
+    "torch>=2.0.1",
+    "tqdm>=4.65.0",
+    "transformers>=4.30.1,<=4.33.3",
+    "hydra-core>=1.3.1",
+    "wandb==0.13.5",
+    "einops",
+    "torchvision",
+    "hydra-joblib-launcher",
+    "webdataset",
+    "beautifulsoup4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+    "pre-commit",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "myst-parser",
+]
+
+[project.urls]
+Homepage = "https://github.com/frederikkemarin/BEND"
+Documentation = "https://bend.readthedocs.io"
+Repository = "https://github.com/frederikkemarin/BEND"
+"Bug Tracker" = "https://github.com/frederikkemarin/BEND/issues"
+
+[project.scripts]
+download-bend = "scripts.download_bend:main"
+precompute-embeddings = "scripts.precompute_embeddings:main"
+train-on-task = "scripts.train_on_task:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bend*"]
+
+[tool.setuptools.package-data]
+bend = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=bend --cov-report=term-missing --cov-report=html"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.coverage.run]
+source = ["bend"]
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+# UV-specific configuration for build dependencies
+[tool.uv.extra-build-dependencies]
+pathtools = ["imp"]

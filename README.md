@@ -35,12 +35,67 @@ chr3	    1070026	1070436	valid	0
 
 ### 2. Setup
 
-We recommend installing BEND in a conda environment with Python 3.10.
+#### Quick Setup (Recommended - using uv and make)
+
+**Prerequisites:** Install [uv](https://docs.astral.sh/uv/) - a fast Python package manager
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**One-command setup:**
+```bash
+git clone https://github.com/frederikkemarin/BEND.git
+cd BEND
+make setup              # Set up environment with Python 3.11
+make download-data      # Download dataset via Google Cloud Storage (fast)
+source .venv/bin/activate  # Activate environment
+```
+
+**Data download options:**
+```bash
+# Fast download via Google Cloud Storage (recommended)
+make download-data      # Requires gsutil (Google Cloud SDK)
+
+# Original download method (fallback)
+make download-data-original  # Uses the original download script
+```
+
+**Interactive setup:**
+```bash
+./setup_dev.sh  # Interactive script with setup options
+```
+
+**Available make commands:**
+```bash
+make help               # Show all available commands
+make setup              # Basic environment setup
+make setup-dev          # Development setup with testing tools
+make download-data      # Download dataset (Google Cloud Storage - fast)
+make download-data-original  # Download dataset (original method - fallback)
+make test               # Run tests
+make format             # Format code
+make clean              # Clean build artifacts
+make status             # Check environment status
+```
+
+#### Alternative Setup (Manual)
+
+If you prefer manual setup or don't have `make` available:
 1. Clone the BEND repository: `git clone https://github.com/frederikkemarin/BEND.git`
 2. Change to the BEND directory: `cd BEND`
-3. Install the requirements: `pip install -r requirements.txt`
-4. Install BEND in development mode: `pip install -e .`
-5. Download the data: `python scripts/download_bend.py`
+3. Install Python 3.11: `uv python install 3.11`
+4. Create virtual environment: `uv venv --python 3.11`
+5. Install the requirements: `uv pip install -r requirements.txt`
+6. Install BEND in development mode: `source .venv/bin/activate && uv pip install -e .`
+7. Download the data: 
+   - **Fast (recommended)**: `mkdir -p data && gsutil -m cp -r gs://curvebio-mahdibaghbanzadeh/bend/* data/`
+   - **Fallback**: `python scripts/download_bend.py`
+
+**Prerequisites for fast download:**
+- Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install
+- This provides the `gsutil` command for efficient data transfer
+
+**Note:** We recommend Python 3.11 due to compatibility issues with some dependencies in Python 3.12.
 
 ### 3. Computing embeddings
 
