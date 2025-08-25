@@ -49,6 +49,8 @@ dependencies = [
     "hydra-joblib-launcher",
     "webdataset",
     "beautifulsoup4",
+    "h5py>=3.11.0",
+    "pysam>=0.23.3",
 ]
 
 [project.optional-dependencies]
@@ -73,17 +75,27 @@ Documentation = "https://bend.readthedocs.io"
 Repository = "https://github.com/frederikkemarin/BEND"
 "Bug Tracker" = "https://github.com/frederikkemarin/BEND/issues"
 
-[project.scripts]
-download-bend = "scripts.download_bend:main"
-precompute-embeddings = "scripts.precompute_embeddings:main"
-train-on-task = "scripts.train_on_task:main"
+# [project.scripts]
+# Scripts are designed to be run directly, not as console scripts
+# download-bend = "scripts.download_bend:main"
+# precompute-embeddings = "scripts.precompute_embeddings:main"
+# train-on-task = "scripts.train_on_task:main"
+
+[tool.setuptools]
+# Enable package discovery
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["bend*"]
+exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 bend = ["py.typed"]
+
+# Enable editable installs
+[tool.setuptools.dynamic]
+# This section can be used for dynamic metadata if needed
 
 [tool.black]
 line-length = 88
@@ -151,7 +163,3 @@ exclude_lines = [
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
 ]
-
-# UV-specific configuration for build dependencies
-[tool.uv.extra-build-dependencies]
-pathtools = ["imp"]
