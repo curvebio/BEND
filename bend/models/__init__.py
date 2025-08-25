@@ -8,7 +8,6 @@ This module contains the implementations of the supervised models used in the pa
 - :class:`~bend.models.downstream.CNN`: a two-layer CNN used for all downstream tasks.
 """
 
-from .downstream import ConvNetForSupervised, CNN
-
-from .dilated_cnn import ConvNetForMaskedLM, ConvNetConfig, ConvNetModel
-from .awd_lstm import AWDLSTMForLM, AWDLSTMConfig, AWDLSTMModelForInference
+from .awd_lstm import AWDLSTMConfig, AWDLSTMForLM, AWDLSTMModelForInference
+from .dilated_cnn import ConvNetConfig, ConvNetForMaskedLM, ConvNetModel
+from .downstream import CNN, ConvNetForSupervised

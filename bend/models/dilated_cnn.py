@@ -4,16 +4,18 @@ dilated_cnn.py
 A ResNet with dilated convolutions masked language model.
 code from https://github.com/songlab-cal/gpn
 """
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 from transformers import PretrainedConfig, PreTrainedModel
-from transformers.modeling_outputs import MaskedLMOutput, BaseModelOutput
+from transformers.modeling_outputs import BaseModelOutput, MaskedLMOutput
 
 
 class ConvNetConfig(PretrainedConfig):
     """Configuration of a ResNet with dilated convolutions."""
+
     model_type = "ConvNet"
 
     def __init__(
@@ -26,7 +28,7 @@ class ConvNetConfig(PretrainedConfig):
         dilation_max=32,
         dilation_cycle=6,
         initializer_range=0.02,
-        **kwargs
+        **kwargs,
     ):
         """
         Build the configuration of a ResNet with dilated convolutions.
@@ -65,9 +67,10 @@ class ConvNetPreTrainedModel(PreTrainedModel):
     """Base class for a ResNet with dilated convolutions.
     Hanndles the initialization, loading and saving of the model.
     """
+
     config_class = ConvNetConfig
     base_model_prefix = "model"
-    #supports_gradient_checkpointing = True
+    # supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -89,6 +92,7 @@ class ConvNetPreTrainedModel(PreTrainedModel):
 
 class TransposeLayer(nn.Module):
     """A layer that transposes the input."""
+
     def __init__(
         self,
     ):
@@ -114,6 +118,7 @@ class TransposeLayer(nn.Module):
 
 class ConvLayer(nn.Module):
     """A layer that performs a convolution."""
+
     def __init__(
         self,
         hidden_size=None,
@@ -121,7 +126,7 @@ class ConvLayer(nn.Module):
     ):
         """
         Build a convolutional layer.
-        
+
         Parameters
         ----------
         hidden_size: int
@@ -168,6 +173,7 @@ class ConvLayer(nn.Module):
 
 class OneHotEmbedding(nn.Module):
     """A layer that performs a one-hot embedding."""
+
     def __init__(
         self,
         hidden_size=None,
@@ -185,7 +191,7 @@ class OneHotEmbedding(nn.Module):
 
     def forward(self, x):
         """
-        Perform a one-hot embedding. If the input is already one-hot embedded 
+        Perform a one-hot embedding. If the input is already one-hot embedded
         (it has two dimensions), then it is returned as is.
 
         Parameters
@@ -197,26 +203,29 @@ class OneHotEmbedding(nn.Module):
         -------
         torch.Tensor
         """
-        
-        if x.dim() > 2: # already onehot embedded 
+
+        if x.dim() > 2:  # already onehot embedded
             return x
-        else: # if categorically encoded 
+        else:  # if categorically encoded
             return F.one_hot(x.long(), num_classes=self.hidden_size).float()
-        
+
     def extra_repr(self):
         return f"hidden_size={self.hidden_size}"
 
 
-
 def _get_dilation_schedule(config):
     return [
-        min(config.dilation_max, 2**((i%config.dilation_cycle)//config.dilation_double_every))
+        min(
+            config.dilation_max,
+            2 ** ((i % config.dilation_cycle) // config.dilation_double_every),
+        )
         for i in range(config.n_layers)
     ]
 
 
 class ConvNetModel(ConvNetPreTrainedModel):
     """A ResNet with dilated convolutions."""
+
     def __init__(
         self,
         config,
@@ -236,14 +245,16 @@ class ConvNetModel(ConvNetPreTrainedModel):
         self.embedding = OneHotEmbedding(config.hidden_size)
 
         self.dilation_schedule = _get_dilation_schedule(config)
-        self.encoder = nn.Sequential(*[
-            ConvLayer(
-                hidden_size=config.hidden_size,
-                kernel_size=config.kernel_size,
-                dilation=self.dilation_schedule[i],
-            )
-            for i in range(config.n_layers)
-        ])
+        self.encoder = nn.Sequential(
+            *[
+                ConvLayer(
+                    hidden_size=config.hidden_size,
+                    kernel_size=config.kernel_size,
+                    dilation=self.dilation_schedule[i],
+                )
+                for i in range(config.n_layers)
+            ]
+        )
         self.post_init()
 
     def forward(self, input_ids=None, **kwargs):
@@ -262,6 +273,7 @@ class ConvNetModel(ConvNetPreTrainedModel):
 
 class ConvNetOnlyMLMHead(nn.Module):
     """A head for masked language modeling."""
+
     def __init__(
         self,
         config,
@@ -292,7 +304,7 @@ class ConvNetOnlyMLMHead(nn.Module):
         ----------
         hidden_state: torch.Tensor
             Hidden state of the model.
-        
+
         Returns
         -------
         torch.Tensor
@@ -303,6 +315,7 @@ class ConvNetOnlyMLMHead(nn.Module):
 
 class ConvNetForMaskedLM(ConvNetPreTrainedModel):
     """A ResNet with dilated convolutions and a head for masked language modeling."""
+
     def __init__(
         self,
         config,
@@ -322,7 +335,9 @@ class ConvNetForMaskedLM(ConvNetPreTrainedModel):
         self.cls = ConvNetOnlyMLMHead(config)
         self.post_init()
 
-    def forward(self, input_ids=None, labels=None, return_last_hidden_state = True, **kwargs):
+    def forward(
+        self, input_ids=None, labels=None, return_last_hidden_state=True, **kwargs
+    ):
         """
         Perform a forward pass through the model.
 
@@ -346,10 +361,9 @@ class ConvNetForMaskedLM(ConvNetPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
-        
-        
+
         return MaskedLMOutput(
             loss=loss,
             logits=logits,
-            hidden_states = hidden_state if return_last_hidden_state else None
+            hidden_states=hidden_state if return_last_hidden_state else None,
         )
