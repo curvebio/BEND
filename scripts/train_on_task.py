@@ -43,7 +43,12 @@ def run_experiment(cfg: DictConfig) -> None:
     os.makedirs(f"{cfg.output_dir}/checkpoints/", exist_ok=True)
     print("output_dir", cfg.output_dir)
     # init wandb
-    run = wandb.init(**cfg.wandb, dir=cfg.output_dir, config=cfg)
+    # run = wandb.init(**cfg.wandb, dir=cfg.output_dir, config=cfg)
+    run = wandb.init(
+        **cfg.wandb,
+        dir=cfg.output_dir,
+        config=wandb.config,
+    )
 
     OmegaConf.save(
         cfg, f"{cfg.output_dir}/config.yaml"
