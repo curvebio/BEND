@@ -1249,6 +1249,8 @@ class DNABert2Embedder(BaseEmbedder):
                             .cpu()
                             .numpy()
                         )
+                        output = np.expand_dims(output, axis=0)
+
                     if upsample_embeddings and not (
                         self.return_loss and remove_special_tokens
                     ):
