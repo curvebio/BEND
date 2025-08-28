@@ -113,7 +113,48 @@ If you prefer manual setup or don't have `make` available:
 
 **Note:** We recommend Python 3.11 due to compatibility issues with some dependencies in Python 3.12.
 
-### 3. Computing embeddings
+### 3. GPU Device Selection
+
+When training models on multi-GPU systems, you may want to specify which GPU to use. Here are some useful tricks for GPU device selection:
+
+#### Option 1: Use CUDA_VISIBLE_DEVICES for single GPU training
+This is the cleanest approach - make only a specific GPU visible to the process:
+```bash
+# Use only GPU 3 (appears as cuda:0 to PyTorch)
+CUDA_VISIBLE_DEVICES=3 python scripts/train_on_task.py --config-name gene_finding embedder=dnabert2
+
+# Use only GPU 1
+CUDA_VISIBLE_DEVICES=1 python scripts/precompute_embeddings.py --config-name embed task=gene_finding model=hyenadna-medium-160k
+```
+
+#### Option 2: Use device_id parameter
+You can specify the device ID directly in the command:
+```bash
+python scripts/train_on_task.py --config-name gene_finding embedder=dnabert2 params.device_id=3
+```
+**Note:** This may cause issues with DataParallel on multi-GPU systems. Use Option 1 or 3 instead.
+
+#### Option 3: Use CUDA_VISIBLE_DEVICES for multi-GPU training
+For training with multiple specific GPUs:
+```bash
+# Use GPUs 2 and 3 (appear as cuda:0 and cuda:1 to PyTorch)
+CUDA_VISIBLE_DEVICES=2,3 python scripts/train_on_task.py --config-name gene_finding embedder=dnabert2
+
+# Use GPUs 0, 1, and 3
+CUDA_VISIBLE_DEVICES=0,1,3 python scripts/train_on_task.py --config-name gene_finding embedder=dnabert2
+```
+
+#### Why use CUDA_VISIBLE_DEVICES?
+- **Avoids device conflicts**: Prevents DataParallel from trying to use all available GPUs
+- **Clean resource allocation**: Other processes can't accidentally use your specified GPUs
+- **Local effect only**: This is an environment variable that only affects the specific command/process you run it with
+  - **No system-wide changes**: Your system GPU configuration remains unchanged
+  - **No impact on other terminals**: Other terminal sessions and processes are unaffected
+  - **Temporary**: The effect ends when the command completes
+  - **Process-specific**: Each command can use different GPU configurations independently
+- **Works with all training modes**: Compatible with single-GPU, DataParallel, and DDP training
+
+### 4. Computing embeddings
 
 For training downstream models, it is practical to precompute and save the embeddings to avoid recomputing them at each epoch. As embeddings can grow large when working with genomes, we use [Webdataset](https://github.com/webdataset/webdataset) `tar.gz` files as the format.
 Firstly download the desired data from the [data folder](https://sid.erda.dk/cgi-sid/ls.py?share_id=aNQa0Oz2lY&current_dir=data&flags=f) and place it in BEND/ (for ease of use maintain the same folder structure). 
@@ -167,11 +208,11 @@ embedder = HyenaDNAEmbedder('pretrained_models/hyenadna/hyenadna-tiny-1k-seqlen'
 ```
 
 
-### 4. Evaluating models
+### 5. Evaluating models
 
 #### Training and evaluating supervised models
 
-It is first required that the [above step (computing the embeddings)](#2-computing-embeddings) is completed.
+It is first required that the [above step (computing the embeddings)](#4-computing-embeddings) is completed.
 The embeddings should afterwards be located in `BEND/data/{task_name}/{embedder}/*tar.gz`
 
 To run a downstream task run (from `BEND/`):
