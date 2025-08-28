@@ -245,6 +245,7 @@ class BaseTrainer:
         
         # Initialize early stopping tracking variables
         self.best_metric = None
+        self.best_epoch = None
         self.patience_counter = 0
         self.early_stopped = False
 
@@ -334,7 +335,7 @@ class BaseTrainer:
         # wandb.log({"Training latent with labels": wandb.Image(plt)})
         return
     
-    def _check_early_stopping(self, val_metric):
+    def _check_early_stopping(self, val_metric, epoch):
         """
         Check if early stopping criteria are met.
         
@@ -342,6 +343,8 @@ class BaseTrainer:
         ----------
         val_metric : float
             The current validation metric value.
+        epoch : int
+            The current epoch number.
             
         Returns
         -------
@@ -353,6 +356,7 @@ class BaseTrainer:
             
         if self.best_metric is None:
             self.best_metric = val_metric
+            self.best_epoch = epoch
             self.patience_counter = 0
             return False
             
@@ -367,14 +371,16 @@ class BaseTrainer:
             
         if improved:
             self.best_metric = val_metric
+            self.best_epoch = epoch
             self.patience_counter = 0
-            print(f"Validation metric improved to {val_metric:.6f}")
+            print(f"Validation metric improved to {val_metric:.6f} at epoch {epoch}")
         else:
             self.patience_counter += 1
             print(f"No improvement in validation metric. Patience: {self.patience_counter}/{self.early_stopping_patience}")
             
         if self.patience_counter >= self.early_stopping_patience:
             print(f"Early stopping triggered after {self.patience_counter} epochs without improvement")
+            print(f"Best metric {self.best_metric:.6f} was achieved at epoch {self.best_epoch}")
             return True
             
         return False
@@ -551,14 +557,15 @@ class BaseTrainer:
                 f"Loaded checkpoint from epoch {start_epoch}, train loss: {train_loss}, val loss: {val_loss}, val {self.config.params.metric}: {val_metric}"
             )
 
+
+        epoch = start_epoch
         for epoch in range(1 + start_epoch, epochs + 1):
             print("Training epoch:", epoch)
             train_loss = self.train_epoch(train_loader)
             print("Validating epoch:", epoch)
             val_loss, val_metrics = self.validate(val_loader)
             val_metric = val_metrics[0]
-            # test_loss, test_metric = self.test(test_loader, overwrite=False)
-            # print('TEST:', test_loss, test_metric, checkpoint = epoch)
+
             # save epoch in output dir
             self._save_checkpoint(epoch, train_loss, val_loss, val_metric)
             # log losses to csv
@@ -570,15 +577,30 @@ class BaseTrainer:
             )
             
             # Check for early stopping
-            if self._check_early_stopping(val_metric):
+            if self._check_early_stopping(val_metric, epoch):
                 print(f"Early stopping at epoch {epoch}")
                 self.early_stopped = True
                 break
         
         if not self.early_stopped and self.early_stopping_patience is not None:
             print(f"Training completed normally after {epochs} epochs")
+        
+        # Pass the best checkpoint if early stopping occurred
+        test_checkpoint = None
+        if hasattr(self, 'early_stopped') and self.early_stopped and hasattr(self, 'best_epoch') and self.best_epoch is not None:
+            # Create a checkpoint DataFrame for the best epoch
+            df = pd.read_csv(f"{self.config.output_dir}/losses.csv")
+            best_row = df[df['Epoch'] == self.best_epoch]
+            if len(best_row) > 0:
+                test_checkpoint = best_row.reset_index(drop=True)
+                print(f"Using best checkpoint from epoch {self.best_epoch} for testing")
+            else:
+                print(f"Warning: Could not find epoch {self.best_epoch} in losses.csv, using default selection")
+        
+        test_loss, test_metric = self.test(test_loader, checkpoint=test_checkpoint, overwrite=False)
+        print('TEST:', test_loss, test_metric, epoch)
         return
-
+    
     def train_step(self, batch, idx=0):
         """
         Performs a single training step.
@@ -693,14 +715,19 @@ class BaseTrainer:
         print("TESTING")
         if checkpoint is None:
             df = pd.read_csv(f"{self.config.output_dir}/losses.csv")
-            checkpoint = pd.DataFrame(
-                df.iloc[df[f"val_{self.config.params.metric}"].idxmax()]
-            ).T.reset_index(drop=True)
+            if self.early_stopping_mode == 'max':
+                checkpoint = pd.DataFrame(
+                    df.iloc[df[f"val_{self.config.params.metric}"].idxmax()]
+                ).T.reset_index(drop=True)
+            else:  # mode == 'min'
+                checkpoint = pd.DataFrame(
+                    df.iloc[df[f"val_{self.config.params.metric}"].idxmin()]
+                ).T.reset_index(drop=True)
         # print('before load checkpoint', )
         # print(self.model.state_dict()['conv2.1.bias'])
         # load checkpoint
         print(
-            f'{self.config.output_dir}/checkpoints/epoch_{int(checkpoint["Epoch"].iloc[0])}.pt'
+            f'Best checkpoint: {self.config.output_dir}/checkpoints/epoch_{int(checkpoint["Epoch"].iloc[0])}.pt'
         )
         epoch, train_loss, val_loss, val_metric = self._load_checkpoint(
             f'{self.config.output_dir}/checkpoints/epoch_{int(checkpoint["Epoch"].iloc[0])}.pt'

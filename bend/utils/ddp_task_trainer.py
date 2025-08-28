@@ -123,6 +123,7 @@ class DDPTrainer:
             
             # Initialize early stopping tracking variables
             self.best_metric = None
+            self.best_epoch = None
             self.patience_counter = 0
             self.early_stopped = False
 
@@ -237,7 +238,7 @@ class DDPTrainer:
             step=epoch,
         )
 
-    def _check_early_stopping(self, val_metric):
+    def _check_early_stopping(self, val_metric, epoch):
         """
         Check if early stopping criteria are met (only on main process).
         
@@ -245,6 +246,8 @@ class DDPTrainer:
         ----------
         val_metric : float
             The current validation metric value.
+        epoch : int
+            The current epoch number.
             
         Returns
         -------
@@ -256,6 +259,7 @@ class DDPTrainer:
             
         if self.best_metric is None:
             self.best_metric = val_metric
+            self.best_epoch = epoch
             self.patience_counter = 0
             return False
             
@@ -270,14 +274,16 @@ class DDPTrainer:
             
         if improved:
             self.best_metric = val_metric
+            self.best_epoch = epoch
             self.patience_counter = 0
-            print(f"Validation metric improved to {val_metric:.6f}")
+            print(f"Validation metric improved to {val_metric:.6f} at epoch {epoch}")
         else:
             self.patience_counter += 1
             print(f"No improvement in validation metric. Patience: {self.patience_counter}/{self.early_stopping_patience}")
             
         if self.patience_counter >= self.early_stopping_patience:
             print(f"Early stopping triggered after {self.patience_counter} epochs without improvement")
+            print(f"Best metric {self.best_metric:.6f} was achieved at epoch {self.best_epoch}")
             return True
             
         return False
@@ -528,6 +534,7 @@ class DDPTrainer:
                     f"Loaded checkpoint from epoch {start_epoch}, train loss: {train_loss}, val loss: {val_loss}, val {self.config.params.metric}: {val_metric}"
                 )
 
+        epoch = start_epoch
         for epoch in range(1 + start_epoch, epochs + 1):
             # Set epoch for distributed sampler (only for regular datasets)
             if train_sampler is not None:
@@ -563,7 +570,7 @@ class DDPTrainer:
             # Check for early stopping (only on main process)
             early_stop = False
             if self.is_main_process:
-                early_stop = self._check_early_stopping(val_metric)
+                early_stop = self._check_early_stopping(val_metric, epoch)
                 if early_stop:
                     self.early_stopped = True
                     print(f"Early stopping at epoch {epoch}")
@@ -592,6 +599,22 @@ class DDPTrainer:
             elif self.early_stopping_patience is not None:
                 print(f"Training completed normally after {epochs} epochs")
 
+        # Pass the best checkpoint if early stopping occurred (only on main process)
+        test_checkpoint = None
+        if (self.is_main_process and hasattr(self, 'early_stopped') and self.early_stopped and 
+            hasattr(self, 'best_epoch') and self.best_epoch is not None):
+            # Create a checkpoint DataFrame for the best epoch
+            df = pd.read_csv(f"{self.config.output_dir}/losses.csv")
+            best_row = df[df['Epoch'] == self.best_epoch]
+            if len(best_row) > 0:
+                test_checkpoint = best_row.reset_index(drop=True)
+                print(f"Using best checkpoint from epoch {self.best_epoch} for testing")
+            else:
+                print(f"Warning: Could not find epoch {self.best_epoch} in losses.csv, using default selection")
+
+        test_loss, test_metric = self.test(test_loader, checkpoint=test_checkpoint, overwrite=False)
+        print('TEST:', test_loss, test_metric, epoch)
+
     def test(self, test_loader, checkpoint=None, overwrite=False):
         """Performs testing (only on main process)."""
         if not self.is_main_process:
@@ -600,9 +623,17 @@ class DDPTrainer:
         print("TESTING with DDP")
         if checkpoint is None:
             df = pd.read_csv(f"{self.config.output_dir}/losses.csv")
-            checkpoint = pd.DataFrame(
-                df.iloc[df[f"val_{self.config.params.metric}"].idxmax()]
-            ).T.reset_index(drop=True)
+            # Use early_stopping_mode to determine if we want max or min
+            if self.early_stopping_mode == 'max':
+                # For metrics like accuracy, AUC, etc. where higher is better
+                checkpoint = pd.DataFrame(
+                    df.iloc[df[f"val_{self.config.params.metric}"].idxmax()]
+                ).T.reset_index(drop=True)
+            else:
+                # For metrics like loss where lower is better
+                checkpoint = pd.DataFrame(
+                    df.iloc[df[f"val_{self.config.params.metric}"].idxmin()]
+                ).T.reset_index(drop=True)
             
         # Load checkpoint
         epoch, train_loss, val_loss, val_metric = self._load_checkpoint(

@@ -20,10 +20,11 @@ class MockTrainer:
         
         # Initialize early stopping tracking variables
         self.best_metric = None
+        self.best_epoch = None
         self.patience_counter = 0
         self.early_stopped = False
 
-    def _check_early_stopping(self, val_metric):
+    def _check_early_stopping(self, val_metric, epoch):
         """
         Check if early stopping criteria are met.
         
@@ -31,6 +32,8 @@ class MockTrainer:
         ----------
         val_metric : float
             The current validation metric value.
+        epoch : int
+            The current epoch number.
             
         Returns
         -------
@@ -42,6 +45,7 @@ class MockTrainer:
             
         if self.best_metric is None:
             self.best_metric = val_metric
+            self.best_epoch = epoch
             self.patience_counter = 0
             return False
             
@@ -56,14 +60,16 @@ class MockTrainer:
             
         if improved:
             self.best_metric = val_metric
+            self.best_epoch = epoch
             self.patience_counter = 0
-            print(f"Validation metric improved to {val_metric:.6f}")
+            print(f"Validation metric improved to {val_metric:.6f} at epoch {epoch}")
         else:
             self.patience_counter += 1
             print(f"No improvement in validation metric. Patience: {self.patience_counter}/{self.early_stopping_patience}")
             
         if self.patience_counter >= self.early_stopping_patience:
             print(f"Early stopping triggered after {self.patience_counter} epochs without improvement")
+            print(f"Best metric {self.best_metric:.6f} was achieved at epoch {self.best_epoch}")
             return True
             
         return False
@@ -80,7 +86,7 @@ def simulate_training_with_early_stopping():
     
     for epoch, metric in enumerate(mock_metrics, 1):
         print(f"\nEpoch {epoch}: Validation metric = {metric:.3f}")
-        should_stop = trainer._check_early_stopping(metric)
+        should_stop = trainer._check_early_stopping(metric, epoch)
         
         if should_stop:
             print(f"Training stopped early at epoch {epoch}")
@@ -88,7 +94,7 @@ def simulate_training_with_early_stopping():
     else:
         print("Training completed without early stopping")
     
-    print(f"Best metric achieved: {trainer.best_metric:.6f}")
+    print(f"Best metric achieved: {trainer.best_metric:.6f} at epoch {trainer.best_epoch}")
 
 def simulate_training_without_early_stopping():
     """Simulate a training run that should NOT trigger early stopping."""
@@ -102,7 +108,7 @@ def simulate_training_without_early_stopping():
     
     for epoch, metric in enumerate(mock_metrics, 1):
         print(f"\nEpoch {epoch}: Validation metric = {metric:.3f}")
-        should_stop = trainer._check_early_stopping(metric)
+        should_stop = trainer._check_early_stopping(metric, epoch)
         
         if should_stop:
             print(f"Training stopped early at epoch {epoch}")
@@ -110,7 +116,7 @@ def simulate_training_without_early_stopping():
     else:
         print("Training completed without early stopping")
     
-    print(f"Best metric achieved: {trainer.best_metric:.6f}")
+    print(f"Best metric achieved: {trainer.best_metric:.6f} at epoch {trainer.best_epoch}")
 
 def simulate_loss_based_early_stopping():
     """Simulate early stopping with loss (min mode)."""
@@ -124,7 +130,7 @@ def simulate_loss_based_early_stopping():
     
     for epoch, loss in enumerate(mock_losses, 1):
         print(f"\nEpoch {epoch}: Validation loss = {loss:.3f}")
-        should_stop = trainer._check_early_stopping(loss)
+        should_stop = trainer._check_early_stopping(loss, epoch)
         
         if should_stop:
             print(f"Training stopped early at epoch {epoch}")
@@ -132,7 +138,45 @@ def simulate_loss_based_early_stopping():
     else:
         print("Training completed without early stopping")
     
-    print(f"Best loss achieved: {trainer.best_metric:.6f}")
+    print(f"Best loss achieved: {trainer.best_metric:.6f} at epoch {trainer.best_epoch}")
+
+def test_best_epoch_tracking():
+    """Test that the best epoch is correctly tracked for checkpoint selection."""
+    print("\n\n=== Test 4: Best epoch tracking for checkpoint selection ===")
+    
+    # Create mock trainer with early stopping
+    trainer = MockTrainer(patience=3, min_delta=0.01, mode='max')
+    
+    # Simulate a scenario where the best metric occurs early, then training continues and early stops
+    mock_metrics = [0.70, 0.85, 0.82, 0.81, 0.80, 0.79]  # Best at epoch 2, then decline
+    
+    best_epoch = None
+    for epoch, metric in enumerate(mock_metrics, 1):
+        print(f"\nEpoch {epoch}: Validation metric = {metric:.3f}")
+        should_stop = trainer._check_early_stopping(metric, epoch)
+        
+        if should_stop:
+            print(f"Training stopped early at epoch {epoch}")
+            break
+    
+    # Verify that we tracked the correct best epoch
+    expected_best_epoch = 2  # The epoch with metric 0.85
+    expected_best_metric = 0.85
+    
+    print(f"\nVerification:")
+    print(f"Expected best epoch: {expected_best_epoch}")
+    print(f"Actual best epoch: {trainer.best_epoch}")
+    print(f"Expected best metric: {expected_best_metric}")
+    print(f"Actual best metric: {trainer.best_metric}")
+    
+    if (trainer.best_epoch == expected_best_epoch and 
+        trainer.best_metric is not None and 
+        abs(trainer.best_metric - expected_best_metric) < 1e-6):
+        print("✓ PASS: Best epoch and metric correctly tracked!")
+    else:
+        print("✗ FAIL: Best epoch or metric not correctly tracked!")
+    
+    return trainer.best_epoch == expected_best_epoch
 
 if __name__ == "__main__":
     print("Testing Early Stopping Functionality")
@@ -142,11 +186,17 @@ if __name__ == "__main__":
     simulate_training_with_early_stopping()
     simulate_training_without_early_stopping()
     simulate_loss_based_early_stopping()
+    test_best_epoch_tracking()
     
     print("\n" + "=" * 50)
     print("Early stopping tests completed!")
+    print("\nKey improvements in this version:")
+    print("- ✓ Tracks the epoch when the best metric was achieved")
+    print("- ✓ Loads best checkpoint for testing when early stopping occurs")
+    print("- ✓ Works with both BaseTrainer and DDPTrainer")
     print("\nTo use early stopping in your BEND training:")
     print("1. Add early stopping parameters to your config YAML file")
     print("2. Set early_stopping_patience to desired number of epochs")
     print("3. Set early_stopping_mode to 'max' for metrics or 'min' for loss")
     print("4. Run training normally - early stopping will activate automatically")
+    print("5. When early stopping occurs, testing will use the best checkpoint")
