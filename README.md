@@ -95,6 +95,22 @@ If you prefer manual setup or don't have `make` available:
 - Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install
 - This provides the `gsutil` command for efficient data transfer
 
+**Prerequisites for HyenaDNA models:**
+- Install Git LFS (Large File Storage): Required for downloading HyenaDNA model checkpoints
+  ```bash
+  # On Ubuntu/Debian
+  sudo apt-get install git-lfs
+  
+  # On macOS with Homebrew  
+  brew install git-lfs
+  
+  # On other systems, see: https://git-lfs.github.io/
+  ```
+- Initialize Git LFS in your repository:
+  ```bash
+  git lfs install
+  ```
+
 **Note:** We recommend Python 3.11 due to compatibility issues with some dependencies in Python 3.12.
 
 ### 3. Computing embeddings
@@ -128,7 +144,7 @@ Some of the embedders currently also support computing logits and cross entropy 
 |[AWDLSTMEmbedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.AWDLSTMEmbedder)| BEND | [1 model available](https://sid.erda.dk/cgi-sid/ls.py?share_id=eXAmVvbRSW&current_dir=pretrained_models&flags=f) | A baseline LM used in BEND.
 |[GPNEmbedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.GPNEmbedder)| [Benegas et al.](https://www.biorxiv.org/content/10.1101/2022.08.22.504706v2) | Models trained on [*A. thaliana*](https://huggingface.co/songlab/gpn-arabidopsis) and [Brassicales](https://huggingface.co/songlab/gpn-brassicales) available | This LM was not evaluated in BEND as it was not trained on the human genome. |
 |[GENALMEmbedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.GENALMEmbedder) | [Fishman et al.](https://www.biorxiv.org/content/10.1101/2023.06.12.544594v1) |[8 different models available](https://huggingface.co/AIRI-Institute) | |
-|[HyenaDNAEmbedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.HyenaDNAEmbedder) | [Nguyen et al.](https://arxiv.org/abs/2306.15794) | [5 different models available](https://huggingface.co/LongSafari) | Experimental integration. Requires Git LFS to be installed to automatically download checkpoints. Instead of the HF checkpoint name, the argument when instantiating needs to be of the format `path/to/save/checkpoints/checkpoint_name` |
+|[HyenaDNAEmbedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.HyenaDNAEmbedder) | [Nguyen et al.](https://arxiv.org/abs/2306.15794) | [5 different models available](https://huggingface.co/LongSafari) | **Requires Git LFS to be installed** to automatically download checkpoints. Instead of the HF checkpoint name, the argument when instantiating needs to be of the format `path/to/save/checkpoints/checkpoint_name` |
 |[DNABert2Embedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.DNABert2Embedder) | [Zhou et al.](https://arxiv.org/pdf/2306.15006v1.pdf) | [1 model available](https://huggingface.co/zhihan1996/DNABERT-2-117M) | |
 |[GROVEREmbedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.GROVEREmbedder) | [Sanabria et al.](https://www.nature.com/articles/s42256-024-00872-0) | [1 model available](https://zenodo.org/records/8373117) | The original BPE tokenizer is not available, so we apply MaxMatch for segmentation of the input sequence into tokens.|
 |[CaduceusEmbedder](https://bend.readthedocs.io/en/latest/bend.utils.embedders.html#bend.utils.embedders.CaduceusEmbedder) | [Schiff et al.](https://arxiv.org/abs/2403.03234) | [2 different models available](https://github.com/kuleshov-group/caduceus/) | Requires `mamba-ssm==1.2.0.post1` to be installed in the environment. |
@@ -386,8 +402,28 @@ In case the variant consequences categories are used, [Ensembl VEP](https://geno
     eprint = {https://academic.oup.com/nar/article-pdf/48/D1/D835/31698033/gkz972.pdf},
     }
 
+## Troubleshooting
 
+### HyenaDNA Models
 
+**Git LFS Not Installed:**
+If you get "mkdir: missing operand" errors when trying to use HyenaDNA models, ensure Git LFS is installed:
+```bash
+# Install Git LFS
+sudo apt-get install git-lfs  # Ubuntu/Debian
+brew install git-lfs          # macOS
+
+# Initialize in your repository
+git lfs install
+```
+
+**PyTorch UnpicklingError:**
+If you encounter `UnpicklingError` related to `weights_only` when loading HyenaDNA models, this is due to PyTorch 2.6+ security changes. The issue has been fixed in the codebase by setting `weights_only=False` for trusted model checkpoints.
+
+**Model Download Issues:**
+- Ensure you have sufficient disk space (HyenaDNA models can be >100MB)
+- Check your internet connection for large file downloads
+- Verify the model path format: `pretrained_models/hyenadna/model-name`
 
 
 ## FAQ

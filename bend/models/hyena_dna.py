@@ -1411,6 +1411,7 @@ class HyenaDNAPreTrainedModel(PreTrainedModel):
         loaded_ckpt = torch.load(
             os.path.join(pretrained_model_name_or_path, "weights.ckpt"),
             map_location=torch.device(device),
+            weights_only=False,
         )
 
         # need to load weights slightly different if using gradient checkpointing
