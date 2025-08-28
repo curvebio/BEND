@@ -28,8 +28,11 @@ def run_experiment(cfg: DictConfig) -> None:
     else:
         splits = cfg.splits
     print("Embedding with", cfg.model)
-    # instatiante model
-    embedder = hydra.utils.instantiate(cfg[cfg.model])
+    # instantiate model with device_id parameter
+    model_config = cfg[cfg.model].copy()
+    if 'device_id' in cfg and cfg.device_id is not None:
+        model_config['device_id'] = cfg.device_id
+    embedder = hydra.utils.instantiate(model_config)
     for split in splits:
         print(f"Embedding split: {split}")
         output_dir = f"{cfg.data_dir}/{cfg.task}/{cfg.model}/"

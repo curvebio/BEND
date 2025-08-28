@@ -60,6 +60,7 @@ params:
     - 82.86
   metric : auprc
   activation : none
+  device_id: null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
   # Early stopping configuration
   early_stopping_patience: 5
   early_stopping_min_delta: 0.0

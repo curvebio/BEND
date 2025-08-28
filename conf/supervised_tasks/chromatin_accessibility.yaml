@@ -64,6 +64,7 @@ params:
   early_stopping_patience: 5
   early_stopping_min_delta: 0.0
   early_stopping_mode: "max"
+  device_id: null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
 wandb:
   mode : disabled 
 

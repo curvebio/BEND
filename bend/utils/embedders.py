@@ -47,7 +47,21 @@ logging.set_verbosity_error()
 # TODO graceful auto downloading solution for everything that is hosted in a nice way
 # https://github.com/huggingface/transformers/blob/main/src/transformers/utils/hub.py
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def get_device(device_id=None):
+    """Get the appropriate device based on device_id or auto-selection."""
+    if device_id is not None:
+        if torch.cuda.is_available():
+            # Check if the requested GPU actually exists
+            if device_id < torch.cuda.device_count():
+                return torch.device(f"cuda:{device_id}")
+            else:
+                print(f"Warning: GPU {device_id} not available (only {torch.cuda.device_count()} GPUs detected), using CPU")
+                return torch.device("cpu")
+        else:
+            print(f"Warning: CUDA not available, using CPU instead of cuda:{device_id}")
+            return torch.device("cpu")
+    else:
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ##
 ## GPN https://www.biorxiv.org/content/10.1101/2022.08.22.504706v1
@@ -59,16 +73,19 @@ class BaseEmbedder:
     All embedders should inherit from this class.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, device_id=None, **kwargs):
         """Initialize the embedder. Calls `load_model` with the given arguments.
 
         Parameters
         ----------
         *args
             Positional arguments. Passed to `load_model`.
+        device_id : int, optional
+            GPU device ID to use. If None, uses auto-selection.
         **kwargs
             Keyword arguments. Passed to `load_model`.
         """
+        self.device = get_device(device_id)
         self.load_model(*args, **kwargs)
 
     def load_model(self, *args, **kwargs):
@@ -137,7 +154,7 @@ class GPNEmbedder(BaseEmbedder):
         self.model = AutoModel.from_pretrained(model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        self.model.to(device)
+        self.model.to(self.device)
         self.model.eval()
 
     def embed(
@@ -175,7 +192,7 @@ class GPNEmbedder(BaseEmbedder):
                     return_attention_mask=False,
                     return_token_type_ids=False,
                 )["input_ids"]
-                input_ids = input_ids.to(device)
+                input_ids = input_ids.to(self.device)
                 embedding = self.model(input_ids=input_ids).last_hidden_state
 
                 embeddings.append(embedding.detach().cpu().numpy())
@@ -221,7 +238,7 @@ class DNABertEmbedder(BaseEmbedder):
         config = BertConfig.from_pretrained(dnabert_path)
         self.tokenizer = BertTokenizer.from_pretrained(dnabert_path)
         self.bert_model = BertModel.from_pretrained(dnabert_path, config=config)
-        self.bert_model.to(device)
+        self.bert_model.to(self.device)
         self.bert_model.eval()
 
         self.kmer = kmer
@@ -268,12 +285,12 @@ class DNABertEmbedder(BaseEmbedder):
                     output = []
                     for chunk in model_input:
                         output.append(
-                            self.bert_model(chunk.to(device))[0].detach().cpu()
+                            self.bert_model(chunk.to(self.device))[0].detach().cpu()
                         )
                     output = torch.cat(output, dim=1).numpy()
                 else:
                     output = (
-                        self.bert_model(model_input.to(device))[0]
+                        self.bert_model(model_input.to(self.device))[0]
                         .detach()
                         .cpu()
                         .numpy()
@@ -426,7 +443,7 @@ class NucleotideTransformerEmbedder(BaseEmbedder):
             self.max_seq_len = 5994  # "model_max_length": 1000, 6-mer --> 6000
             self.max_tokens = 1000
             self.is_v2 = False
-        self.model.to(device)
+        self.model.to(self.device)
         self.model.eval()
 
         self.return_logits = return_logits
@@ -473,7 +490,7 @@ class NucleotideTransformerEmbedder(BaseEmbedder):
                     tokens_ids = (
                         self.tokenizer(chunk, return_tensors="pt")["input_ids"]
                         .int()
-                        .to(device)
+                        .to(self.device)
                     )
                     if (
                         len(tokens_ids[0]) > self.max_tokens
@@ -634,7 +651,7 @@ class AWDLSTMEmbedder(BaseEmbedder):
             download_model(model="awd_lstm", destination_dir=model_path)
         # Get pretrained model
         self.model = AWDLSTMModelForInference.from_pretrained(model_path)
-        self.model.to(device)
+        self.model.to(self.device)
         self.model.eval()
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
@@ -673,7 +690,7 @@ class AWDLSTMEmbedder(BaseEmbedder):
                     return_attention_mask=False,
                     return_token_type_ids=False,
                 )["input_ids"]
-                input_ids = input_ids.to(device)
+                input_ids = input_ids.to(self.device)
                 embedding = self.model(input_ids=input_ids).last_hidden_state
 
                 embeddings.append(embedding.detach().cpu().numpy())
@@ -707,7 +724,7 @@ class ConvNetEmbedder(BaseEmbedder):
         # load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         # load model
-        self.model = ConvNetModel.from_pretrained(model_path).to(device).eval()
+        self.model = ConvNetModel.from_pretrained(model_path).to(self.device).eval()
 
     def embed(
         self,
@@ -742,7 +759,7 @@ class ConvNetEmbedder(BaseEmbedder):
                     return_attention_mask=False,
                     return_token_type_ids=False,
                 )["input_ids"]
-                input_ids = input_ids.to(device)
+                input_ids = input_ids.to(self.device)
                 embedding = self.model(input_ids=input_ids).last_hidden_state
                 embeddings.append(embedding.detach().cpu().numpy())
 
@@ -775,7 +792,7 @@ class GENALMEmbedder(BaseEmbedder):
             self.model = BigBirdModel.from_pretrained(model_name)
         else:
             self.model = GenaLMBertModel.from_pretrained(model_name)
-        self.model.to(device)
+        self.model.to(self.device)
         self.model.eval()
 
         self.max_length = 4096 - 2 if "bigbird" in model_name else 512 - 2
@@ -847,7 +864,7 @@ class GENALMEmbedder(BaseEmbedder):
                         ],
                         dim=1,
                     )
-                    chunk = chunk.to(device)
+                    chunk = chunk.to(self.device)
 
                     outs = self.model(chunk)["last_hidden_state"].detach().cpu().numpy()
                     # print(outs.shape)
@@ -987,14 +1004,14 @@ class HyenaDNAEmbedder(BaseEmbedder):
             model_name,
             download=not os.path.exists(model_path),
             config=backbone_cfg,
-            device=device,
+            device=self.device,
             use_head=use_head,
             use_lm_head=use_lm_head,
             n_classes=n_classes,
         )
         model.eval()
 
-        model.to(device)
+        model.to(self.device)
         self.model = model
 
         # NOTE the git lfs download command will add this,
@@ -1064,7 +1081,7 @@ class HyenaDNAEmbedder(BaseEmbedder):
                     tok_seq = torch.LongTensor(tok_seq).unsqueeze(
                         0
                     )  # unsqueeze for batch dim
-                    tok_seq = tok_seq.to(device)
+                    tok_seq = tok_seq.to(self.device)
 
                     output = self.model(tok_seq)
 
@@ -1136,7 +1153,7 @@ class DNABert2Embedder(BaseEmbedder):
             model_name, trust_remote_code=True
         )
         self.model.eval()
-        self.model.to(device)
+        self.model.to(self.device)
 
         # https://github.com/Zhihan1996/DNABERT_2/issues/2
         self.max_length = 10000  # nucleotides.
@@ -1195,13 +1212,13 @@ class DNABert2Embedder(BaseEmbedder):
 
                     if self.return_logits:
                         output = (
-                            self.model(input_ids.to(device))["logits"]
+                            self.model(input_ids.to(self.device))["logits"]
                             .detach()
                             .cpu()
                             .numpy()
                         )
                     elif self.return_loss:
-                        output = self.model(input_ids.to(device))[
+                        output = self.model(input_ids.to(self.device))[
                             "logits"
                         ].detach()  # (1, len, 4096)
                         dim_to_remove = [
@@ -1233,7 +1250,7 @@ class DNABert2Embedder(BaseEmbedder):
                         output = (
                             torch.nn.functional.cross_entropy(
                                 output.view(-1, output.shape[-1]),
-                                input_ids_shifted.view(-1).to(torch.long).to(device),
+                                input_ids_shifted.view(-1).to(torch.long).to(self.device),
                                 reduction="none",
                             )
                             .cpu()
@@ -1242,7 +1259,7 @@ class DNABert2Embedder(BaseEmbedder):
                         )
                     else:
                         output = (
-                            self.model(input_ids.to(device), output_hidden_states=True)[
+                            self.model(input_ids.to(self.device), output_hidden_states=True)[
                                 "hidden_states"
                             ][-1]
                             .detach()
@@ -1342,7 +1359,7 @@ class GROVEREmbedder(BaseEmbedder):
         self.model = BertModel.from_pretrained(model_path)
         self.tokenizer = BertTokenizer.from_pretrained(model_path, do_lower_case=False)
 
-        self.model.to(device)
+        self.model.to(self.device)
         self.model.eval()
 
         self.max_length = 510  # NOTE this is BPE tokens, not bp.
@@ -1441,7 +1458,7 @@ class GROVEREmbedder(BaseEmbedder):
                         return_attention_mask=False,
                         return_token_type_ids=False,
                     )["input_ids"]
-                    output = self.model(input_ids.to(device))[0].detach().cpu().numpy()
+                    output = self.model(input_ids.to(self.device))[0].detach().cpu().numpy()
 
                     if upsample_embeddings:
                         output = self._repeat_embedding_vectors(
@@ -1558,7 +1575,7 @@ class CaduceusEmbedder(BaseEmbedder):
             model_name, trust_remote_code=True
         )
         self.model.eval()
-        self.model.to(device)
+        self.model.to(self.device)
 
         self.return_logits = return_logits
         self.return_loss = return_loss
@@ -1617,7 +1634,7 @@ class CaduceusEmbedder(BaseEmbedder):
                     if self.return_logits:
                         out = (
                             self.model(
-                                input_ids=input_ids.to(device),
+                                input_ids=input_ids.to(self.device),
                                 output_hidden_states=False,
                                 return_dict=True,
                             )["logits"]
@@ -1628,7 +1645,7 @@ class CaduceusEmbedder(BaseEmbedder):
 
                     elif self.return_loss:
                         out = self.model(
-                            input_ids=input_ids.to(device),
+                            input_ids=input_ids.to(self.device),
                             output_hidden_states=False,
                             return_dict=True,
                         )[
@@ -1640,7 +1657,7 @@ class CaduceusEmbedder(BaseEmbedder):
                         targets = input_ids - 7  # shift to 0-indexed
                         out = torch.nn.functional.cross_entropy(
                             out.view(-1, out.size(-1)),
-                            targets.view(-1).to(device),
+                            targets.view(-1).to(self.device),
                             reduction="none",
                         )
                         out = (
@@ -1650,7 +1667,7 @@ class CaduceusEmbedder(BaseEmbedder):
                     else:
                         out = (
                             self.model(
-                                input_ids=input_ids.to(device),
+                                input_ids=input_ids.to(self.device),
                                 output_hidden_states=True,
                             )["hidden_states"][-1]
                             .detach()
@@ -1673,7 +1690,7 @@ categories_4_letters_unknown = ["A", "C", "G", "N", "T"]
 class OneHotEmbedder(BaseEmbedder):
     """Onehot encode sequences"""
 
-    def __init__(self, nucleotide_categories=categories_4_letters_unknown):
+    def load_model(self, nucleotide_categories=categories_4_letters_unknown):
         """Get an onehot encoder for nucleotide sequences.
 
         Parameters
@@ -1683,7 +1700,6 @@ class OneHotEmbedder(BaseEmbedder):
         """
 
         self.nucleotide_categories = nucleotide_categories
-
         self.label_encoder = LabelEncoder().fit(self.nucleotide_categories)
 
     def embed(

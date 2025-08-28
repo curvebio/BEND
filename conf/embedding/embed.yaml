@@ -1,7 +1,7 @@
 defaults:
   - datadims : [label_dims,embedding_dims,seq_lengths, downstream_downsample]
-  # - hydra : multirun
-  # - override hydra/launcher: joblib # ability to launch jobs in parallel fashion
+  - hydra : multirun
+  - override hydra/launcher: joblib # ability to launch jobs in parallel fashion
   - _self_
 hydra : 
   mode : MULTIRUN
@@ -12,9 +12,10 @@ hydra :
       model: 
         # - hyenadna-medium-160k,
         # - hyenadna-tiny-1k,
-        - resnetlm,
-        - nt_transformer_human_ref,
-        - dnabert2
+        # - resnetlm,
+        # - nt_transformer_human_ref,
+        # dnabert2,
+        hyenadna-medium-160k
             #  grover
              #hyenadna-small-32k,
              #hyenadna-medium-160k,
@@ -52,67 +53,85 @@ embedders_dir : ./pretrained_models/
 splits : null
 model : nt_transformer_1000g
 task : gene_finding
+device_id : null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
 # model instatiators 
 dnabert2:
   _target_ : bend.utils.embedders.DNABert2Embedder
   model_name : zhihan1996/DNABERT-2-117M
   upsample_embeddings : true
+  device_id : ${device_id}
 dnabert6:
   _target_ : bend.utils.embedders.DNABertEmbedder
   model_path : ${embedders_dir}/dnabert6
   kmer : 6
   upsample_embeddings : true
+  device_id : ${device_id}
 gena-lm-bigbird-base-t2t:
   _target_ : bend.utils.embedders.GENALMEmbedder
   model_name : AIRI-Institute/gena-lm-bigbird-base-t2t
   upsample_embeddings : true
+  device_id : ${device_id}
 gena-lm-bert-large-t2:
   _target_ : bend.utils.embedders.GENALMEmbedder
   model_name : AIRI-Institute/gena-lm-bert-large-t2t 
   upsample_embeddings : true
+  device_id : ${device_id}
 hyenadna-large-1m:
   _target_ : bend.utils.embedders.HyenaDNAEmbedder
   model_path : ${embedders_dir}/hyenadna/hyenadna-large-1m-seqlen
+  device_id : ${device_id}
 hyenadna-tiny-1k:
   _target_ : bend.utils.embedders.HyenaDNAEmbedder
   model_path : ${embedders_dir}/hyenadna/hyenadna-tiny-1k-seqlen
+  device_id : ${device_id}
 hyenadna-small-32k:
   _target_ : bend.utils.embedders.HyenaDNAEmbedder
   model_path : ${embedders_dir}/hyenadna/hyenadna-small-32k-seqlen
+  device_id : ${device_id}
 hyenadna-medium-160k:
   _target_ : bend.utils.embedders.HyenaDNAEmbedder
   model_path : ${embedders_dir}/hyenadna/hyenadna-medium-160k-seqlen
+  device_id : ${device_id}
 hyenadna-medium-450k:
   _target_ : bend.utils.embedders.HyenaDNAEmbedder
   model_path : ${embedders_dir}/hyenadna/hyenadna-medium-450k-seqlen
+  device_id : ${device_id}
 resnetlm : 
   _target_ : bend.utils.embedders.ConvNetEmbedder
   model_path : ${embedders_dir}/resnetlm/
+  device_id : ${device_id}
 awdlstm : 
   _target_ : bend.utils.embedders.AWDLSTMEmbedder
   model_path : ${embedders_dir}/awdlstm/
+  device_id : ${device_id}
 nt_transformer_ms :
   _target_ : bend.utils.embedders.NucleotideTransformerEmbedder
   model_name : InstaDeepAI/nucleotide-transformer-2.5b-multi-species
   upsample_embeddings : true
+  device_id : ${device_id}
 nt_transformer_human_ref:
   _target_ : bend.utils.embedders.NucleotideTransformerEmbedder
   model_name : InstaDeepAI/nucleotide-transformer-500m-human-ref
   upsample_embeddings : true
+  device_id : ${device_id}
 nt_transformer_1000g:
   _target_ : bend.utils.embedders.NucleotideTransformerEmbedder
   model_name : InstaDeepAI/nucleotide-transformer-2.5b-1000g
   upsample_embeddings : true
+  device_id : ${device_id}
 onehot:
   _target_ : bend.utils.embedders.OneHotEmbedder
+  device_id : ${device_id}
 nt_transformer_v2_500m:
   _target_ : bend.utils.embedders.NucleotideTransformerEmbedder
   model_name: InstaDeepAI/nucleotide-transformer-v2-500m-multi-species
   upsample_embeddings: true
+  device_id : ${device_id}
 grover:
   _target_ : bend.utils.embedders.GROVEREmbedder
   model_name: ${embedders_dir}/grover/
   upsample_embeddings: true
+  device_id : ${device_id}
 # data configurations for each task
 gene_finding:
   reference_fasta : ${data_dir}/genomes/GRCh38.primary_assembly.genome.fa
