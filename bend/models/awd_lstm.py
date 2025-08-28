@@ -499,7 +499,6 @@ class AWDLSTM(nn.Module):
         for i, layer in enumerate(
             self.lstm
         ):  # if self.is_LM else enumerate(self.lstm[:-1])):
-
             output, new_hidden_state = layer(inputs, hidden_state[i], input_ids)
             outputs_before_dropout.append(output)
             hidden_states.append(new_hidden_state)
@@ -672,7 +671,6 @@ class AWDLSTMModelForInference(AWDLSTMPreTrainedModel):
         self.init_weights()
 
     def forward(self, input_ids, input_mask=None, hidden_state=None):
-
         outputs = self.encoder(input_ids, input_mask, hidden_state)
         return outputs
 
@@ -708,7 +706,6 @@ class AWDLSTMForLM(AWDLSTMPreTrainedModel):
             self.register_buffer(f"last_cell_state_{l}", None)
 
     def _set_last_hidden_state(self, values):
-
         for idx, v in enumerate(values):
             setattr(self, f"last_hidden_state_{idx}", v[0].detach())
             setattr(self, f"last_cell_state_{idx}", v[1].detach())

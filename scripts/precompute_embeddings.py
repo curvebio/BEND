@@ -30,8 +30,8 @@ def run_experiment(cfg: DictConfig) -> None:
     print("Embedding with", cfg.model)
     # instantiate model with device_id parameter
     model_config = cfg[cfg.model].copy()
-    if 'device_id' in cfg and cfg.device_id is not None:
-        model_config['device_id'] = cfg.device_id
+    if "device_id" in cfg and cfg.device_id is not None:
+        model_config["device_id"] = cfg.device_id
     embedder = hydra.utils.instantiate(model_config)
     for split in splits:
         print(f"Embedding split: {split}")
@@ -54,7 +54,7 @@ def run_experiment(cfg: DictConfig) -> None:
                     f"{chunk} is not a valid chunk id. {split} chunk ids are {possible_chunks}"
                 )
                 continue
-            print(f"\t Embedding chunk {chunk} ({chunk +1}/{len(possible_chunks)})")
+            print(f"\t Embedding chunk {chunk} ({chunk + 1}/{len(possible_chunks)})")
             sequtils.embed_from_bed(
                 **cfg[cfg.task],
                 embedder=embedder,
@@ -71,7 +71,6 @@ def run_experiment(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-
     print("Run Embedding")
 
     run_experiment()

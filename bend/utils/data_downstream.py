@@ -111,9 +111,7 @@ def return_dataloader(
     dataset = wds.WebDataset(data)
     if shuffle is not None:
         dataset = dataset.shuffle(shuffle)
-    dataset = (
-        dataset.decode()
-    )  # iterator over samples - each sample is dict with keys "input.npy" and "output.npy"
+    dataset = dataset.decode()  # iterator over samples - each sample is dict with keys "input.npy" and "output.npy"
     dataset = dataset.to_tuple("input.npy", "output.npy")
     dataset = dataset.map_tuple(
         torch.from_numpy, torch.from_numpy

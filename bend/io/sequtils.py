@@ -75,14 +75,14 @@ class Fasta:
 
         self._fasta_path = fasta
         self._fasta = pysam.FastaFile(fasta)
-    
+
     def __getstate__(self):
         """Return state values to be pickled."""
-        return {'_fasta_path': self._fasta_path}
-    
+        return {"_fasta_path": self._fasta_path}
+
     def __setstate__(self, state):
         """Restore state from the unpickled state values."""
-        self._fasta_path = state['_fasta_path']
+        self._fasta_path = state["_fasta_path"]
         self._fasta = pysam.FastaFile(self._fasta_path)
 
     def fetch(

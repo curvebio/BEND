@@ -41,10 +41,14 @@ def run_experiment(cfg: DictConfig) -> None:
         Hydra configuration object.
     """
     # Check if we should use DDP training (default for single GPU)
-    use_ddp = getattr(cfg.params, 'use_ddp', False) and torch.cuda.device_count() > 1
-    
+    use_ddp = getattr(cfg.params, "use_ddp", False) and torch.cuda.device_count() > 1
+
     # Only initialize wandb on main process for DDP
-    if not use_ddp or not hasattr(cfg.params, 'use_ddp') or cfg.params.get('use_ddp', False):
+    if (
+        not use_ddp
+        or not hasattr(cfg.params, "use_ddp")
+        or cfg.params.get("use_ddp", False)
+    ):
         wandb_config = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
         # mkdir output_dir
         os.makedirs(f"{cfg.output_dir}/checkpoints/", exist_ok=True)
@@ -68,20 +72,24 @@ def run_experiment(cfg: DictConfig) -> None:
     train_loader, val_loader, test_loader = hydra.utils.instantiate(
         cfg.data
     )  # instantiate dataloaders
-    
+
     for loader in [train_loader, val_loader, test_loader]:
-        if hasattr(loader, 'dataset') and hasattr(loader.dataset, '__len__'):
+        if hasattr(loader, "dataset") and hasattr(loader.dataset, "__len__"):
             # Regular PyTorch DataLoader
-            print(f" - {loader.dataset.__class__.__name__} with {len(loader.dataset)} samples")
-        elif hasattr(loader, 'dataset'):
+            print(
+                f" - {loader.dataset.__class__.__name__} with {len(loader.dataset)} samples"
+            )
+        elif hasattr(loader, "dataset"):
             # WebDataset or other dataset without __len__
             dataset = loader.dataset
-            if hasattr(dataset, 'length'):
+            if hasattr(dataset, "length"):
                 print(f" - {dataset.__class__.__name__} with {dataset.length} samples")
-            elif hasattr(dataset, 'with_length') and hasattr(dataset, '_length'):
+            elif hasattr(dataset, "with_length") and hasattr(dataset, "_length"):
                 print(f" - {dataset.__class__.__name__} with {dataset._length} samples")
             else:
-                print(f" - {dataset.__class__.__name__} (streaming dataset, length unknown)")
+                print(
+                    f" - {dataset.__class__.__name__} (streaming dataset, length unknown)"
+                )
         else:
             # WebLoader or other loader type
             print(f" - {loader.__class__.__name__} (streaming loader, length unknown)")
@@ -94,9 +102,9 @@ def run_experiment(cfg: DictConfig) -> None:
 
     # Fall back to single-GPU or DataParallel training
     print("Using single-GPU or DataParallel training")
-    
+
     # set device with configurable device_id
-    if hasattr(cfg.params, 'device_id') and cfg.params.device_id is not None:
+    if hasattr(cfg.params, "device_id") and cfg.params.device_id is not None:
         if torch.cuda.is_available():
             try:
                 device = torch.device(f"cuda:{cfg.params.device_id}")
@@ -104,16 +112,20 @@ def run_experiment(cfg: DictConfig) -> None:
                 torch.tensor([1.0]).to(device)
                 print(f"Using specified GPU device: {device}")
             except (RuntimeError, AssertionError) as e:
-                print(f"Warning: Invalid device ID {cfg.params.device_id}, falling back to auto-selection. Error: {e}")
+                print(
+                    f"Warning: Invalid device ID {cfg.params.device_id}, falling back to auto-selection. Error: {e}"
+                )
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 print(f"Using fallback device: {device}")
         else:
             device = torch.device("cpu")
-            print(f"Warning: CUDA not available, using CPU instead of cuda:{cfg.params.device_id}")
+            print(
+                f"Warning: CUDA not available, using CPU instead of cuda:{cfg.params.device_id}"
+            )
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print("Using auto-selected device:", device)
-    
+
     # instantiate model
     # initialization for supervised models
     if cfg.embedder == "resnet-supervised":
@@ -125,10 +137,11 @@ def run_experiment(cfg: DictConfig) -> None:
         with open_dict(cfg):
             cfg.model.update(cfg.supervised_encoder[cfg.embedder])
     model = hydra.utils.instantiate(cfg.model).to(device).float()
-    
+
     # put model on dataparallel
     if torch.cuda.device_count() > 1:
         from bend.models.downstream import CustomDataParallel
+
         print("Let's use", torch.cuda.device_count(), "GPUs with DataParallel!")
         model = CustomDataParallel(model)
     print(model)
@@ -160,7 +173,7 @@ def run_experiment(cfg: DictConfig) -> None:
                 else None
             )
         )
-    
+
     if criterion is None:
         raise ValueError(f"Unknown criterion: {cfg.params.criterion}")
 

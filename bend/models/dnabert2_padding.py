@@ -14,7 +14,6 @@ from einops import rearrange, repeat
 
 
 class IndexFirstAxis(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, input: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
         """Get just the values of `input` which are at `indices`.
@@ -38,9 +37,7 @@ class IndexFirstAxis(torch.autograd.Function):
             repeat(
                 indices, "z -> z d", d=second_dim
             ),  # (indices,) -> (indices, second_dim)
-        ).reshape(
-            -1, *other_shape
-        )  # (num_idx, ...)
+        ).reshape(-1, *other_shape)  # (num_idx, ...)
 
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor) -> Tuple[torch.Tensor, None]:
@@ -65,7 +62,6 @@ index_first_axis = IndexFirstAxis.apply
 
 
 class IndexPutFirstAxis(torch.autograd.Function):
-
     @staticmethod
     def forward(
         ctx, values: torch.Tensor, indices: torch.Tensor, first_axis_dim

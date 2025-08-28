@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 
 class BertEmbeddings(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(
@@ -111,7 +110,6 @@ class BertEmbeddings(nn.Module):
 
 
 class BertUnpadSelfAttention(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
@@ -204,7 +202,6 @@ class BertUnpadSelfAttention(nn.Module):
 
 # Copy of transformer's library BertSelfOutput that will not be caught by surgery methods looking for HF BERT modules.
 class BertSelfOutput(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -391,7 +388,6 @@ class BertEncoder(nn.Module):
         n_heads = self.num_attention_heads
 
         def _get_alibi_head_slopes(n_heads: int) -> List[float]:
-
             def get_slopes_power_of_2(n_heads: int) -> List[float]:
                 start = 2 ** (-(2 ** -(math.log2(n_heads) - 3)))
                 ratio = start
@@ -431,7 +427,6 @@ class BertEncoder(nn.Module):
         output_all_encoded_layers: Optional[bool] = True,
         subset_mask: Optional[torch.Tensor] = None,
     ) -> List[torch.Tensor]:
-
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         extended_attention_mask = extended_attention_mask.to(
             dtype=next(self.parameters()).dtype
@@ -516,7 +511,6 @@ class BertEncoder(nn.Module):
 
 
 class BertPooler(nn.Module):
-
     def __init__(self, config):
         super(BertPooler, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -534,7 +528,6 @@ class BertPooler(nn.Module):
 
 
 class BertPredictionHeadTransform(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -674,7 +667,6 @@ class BertModel(BertPreTrainedModel):
 # Bert Heads
 ###################
 class BertLMPredictionHead(nn.Module):
-
     def __init__(self, config, bert_model_embedding_weights):
         super().__init__()
         self.transform = BertPredictionHeadTransform(config)
@@ -692,7 +684,6 @@ class BertLMPredictionHead(nn.Module):
 
 
 class BertOnlyMLMHead(nn.Module):
-
     def __init__(self, config, bert_model_embedding_weights):
         super().__init__()
         self.predictions = BertLMPredictionHead(config, bert_model_embedding_weights)
@@ -703,7 +694,6 @@ class BertOnlyMLMHead(nn.Module):
 
 
 class BertOnlyNSPHead(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
@@ -714,7 +704,6 @@ class BertOnlyNSPHead(nn.Module):
 
 
 class BertForMaskedLM(BertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 

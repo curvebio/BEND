@@ -195,9 +195,9 @@ class HyenaFilter(OptimModule):
 
         act = Sin(dim=order, w=w)
         self.emb_dim = emb_dim
-        assert (
-            emb_dim % 2 != 0 and emb_dim >= 3
-        ), "emb_dim must be odd and greater or equal to 3 (time, sine and cosine)"
+        assert emb_dim % 2 != 0 and emb_dim >= 3, (
+            "emb_dim must be odd and greater or equal to 3 (time, sine and cosine)"
+        )
         self.seq_len = seq_len
 
         self.pos_emb = PositionalEmbedding(emb_dim, seq_len, lr_pos_emb)
@@ -394,9 +394,9 @@ class MHA(nn.Module):
         self.return_residual = return_residual
 
         self.num_heads = num_heads
-        assert (
-            self.embed_dim % num_heads == 0
-        ), "self.kdim must be divisible by num_heads"
+        assert self.embed_dim % num_heads == 0, (
+            "self.kdim must be divisible by num_heads"
+        )
         self.head_dim = self.embed_dim // num_heads
 
         linear_cls = nn.Linear
@@ -475,7 +475,6 @@ The MLP layer after the mixer layer (HyenaOperator).
 
 
 class Mlp(nn.Module):
-
     def __init__(
         self,
         in_features,
@@ -521,7 +520,6 @@ class LinearResidual(nn.Linear):
 
 
 class Block(nn.Module):
-
     def __init__(
         self,
         dim,
@@ -771,7 +769,6 @@ revert to doing nothing.
 
 
 class GPT2Embeddings(nn.Module):
-
     def __init__(
         self,
         embed_dim,
@@ -830,7 +827,6 @@ class GPT2Embeddings(nn.Module):
 
 
 class LMBackbone(nn.Module):
-
     def __init__(
         self,
         d_model: int,
@@ -1045,7 +1041,6 @@ feasible on colab.
 
 
 class HyenaDNAModel(nn.Module):
-
     def __init__(
         self,
         d_model: int,
@@ -1378,7 +1373,6 @@ class HyenaDNAPreTrainedModel(PreTrainedModel):
         use_lm_head=False,
         n_classes=2,
     ):
-
         # TODO make this use the default huggingface cache path.
 
         # first check if it is a local path

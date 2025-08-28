@@ -24,7 +24,6 @@ for model in os.listdir(folder):
     if len(dfs) == 0:
         continue
     for df in dfs:
-
         df = pd.read_csv(df, header="infer")
         test_col = [n for n in df.columns if n.startswith("test")][1]
         test_metric = test_col.split("_")[-1].upper()

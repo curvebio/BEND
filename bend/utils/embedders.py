@@ -47,6 +47,7 @@ logging.set_verbosity_error()
 # TODO graceful auto downloading solution for everything that is hosted in a nice way
 # https://github.com/huggingface/transformers/blob/main/src/transformers/utils/hub.py
 
+
 def get_device(device_id=None):
     """Get the appropriate device based on device_id or auto-selection."""
     if device_id is not None:
@@ -55,13 +56,16 @@ def get_device(device_id=None):
             if device_id < torch.cuda.device_count():
                 return torch.device(f"cuda:{device_id}")
             else:
-                print(f"Warning: GPU {device_id} not available (only {torch.cuda.device_count()} GPUs detected), using CPU")
+                print(
+                    f"Warning: GPU {device_id} not available (only {torch.cuda.device_count()} GPUs detected), using CPU"
+                )
                 return torch.device("cpu")
         else:
             print(f"Warning: CUDA not available, using CPU instead of cuda:{device_id}")
             return torch.device("cpu")
     else:
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 ##
 ## GPN https://www.biorxiv.org/content/10.1101/2022.08.22.504706v1
@@ -535,7 +539,9 @@ class NucleotideTransformerEmbedder(BaseEmbedder):
                                 self.model(tokens_ids)["logits"].detach().cpu().numpy()
                             )
                         elif self.return_loss:
-                            outs = self.model(tokens_ids)[
+                            outs = self.model(
+                                tokens_ids
+                            )[
                                 "logits"
                             ].detach()  # NOTE  in V1 only is shape 4105, even though vocab_size is 4107. Correct in V2.
                             # NOTE order in V1: unk, pad, mask,cls , ... actual tokens ... eos, bos  --> last 2 tokens are not used in the model.
@@ -610,12 +616,11 @@ class NucleotideTransformerEmbedder(BaseEmbedder):
         """
         Nucleotide transformer uses 6-mer embedding, but single-embedding for remaining nucleotides.
         """
-        assert (
-            len(tokens) == embeddings.shape[1]
-        ), "Number of tokens and embeddings must match."
+        assert len(tokens) == embeddings.shape[1], (
+            "Number of tokens and embeddings must match."
+        )
         new_embeddings = []
         for idx, token in enumerate(tokens):
-
             if has_special_tokens and idx == 0:
                 new_embeddings.append(embeddings[:, [idx]])  # (1, hidden_dim)
                 continue
@@ -683,7 +688,6 @@ class AWDLSTMEmbedder(BaseEmbedder):
         embeddings = []
         with torch.no_grad():
             for s in tqdm(sequences, disable=disable_tqdm):
-
                 input_ids = self.tokenizer(
                     s,
                     return_tensors="pt",
@@ -852,7 +856,6 @@ class GENALMEmbedder(BaseEmbedder):
                 ]  # split into chunks
                 embedded_seq = []
                 for n_chunk, chunk in enumerate(id_chunks):  # embed each chunk
-
                     # add the special tokens
                     chunk = torch.cat(
                         [
@@ -909,12 +912,11 @@ class GENALMEmbedder(BaseEmbedder):
         Byte-pair encoding merges a variable number of letters into one token.
         We need to repeat each token's embedding vector for each letter in the token.
         """
-        assert (
-            len(tokens) == embeddings.shape[1]
-        ), "Number of tokens and embeddings must match."
+        assert len(tokens) == embeddings.shape[1], (
+            "Number of tokens and embeddings must match."
+        )
         new_embeddings = []
         for idx, token in enumerate(tokens):
-
             if has_special_tokens and (idx == 0 or idx == len(tokens) - 1):
                 new_embeddings.append(embeddings[:, [idx]])  # (1, 768)
                 continue
@@ -1194,7 +1196,6 @@ class DNABert2Embedder(BaseEmbedder):
         embeddings = []
         with torch.no_grad():
             for sequence in tqdm(sequences, disable=disable_tqdm):
-
                 chunks = [
                     sequence[chunk : chunk + self.max_length]
                     for chunk in range(0, len(sequence), self.max_length)
@@ -1202,7 +1203,6 @@ class DNABert2Embedder(BaseEmbedder):
 
                 embedded_chunks = []
                 for n_chunk, chunk in enumerate(chunks):
-
                     input_ids = self.tokenizer(
                         chunk,
                         return_tensors="pt",
@@ -1250,7 +1250,9 @@ class DNABert2Embedder(BaseEmbedder):
                         output = (
                             torch.nn.functional.cross_entropy(
                                 output.view(-1, output.shape[-1]),
-                                input_ids_shifted.view(-1).to(torch.long).to(self.device),
+                                input_ids_shifted.view(-1)
+                                .to(torch.long)
+                                .to(self.device),
                                 reduction="none",
                             )
                             .cpu()
@@ -1259,9 +1261,9 @@ class DNABert2Embedder(BaseEmbedder):
                         )
                     else:
                         output = (
-                            self.model(input_ids.to(self.device), output_hidden_states=True)[
-                                "hidden_states"
-                            ][-1]
+                            self.model(
+                                input_ids.to(self.device), output_hidden_states=True
+                            )["hidden_states"][-1]
                             .detach()
                             .cpu()
                             .numpy()
@@ -1314,12 +1316,11 @@ class DNABert2Embedder(BaseEmbedder):
         Byte-pair encoding merges a variable number of letters into one token.
         We need to repeat each token's embedding vector for each letter in the token.
         """
-        assert (
-            len(tokens) == embeddings.shape[1]
-        ), "Number of tokens and embeddings must match."
+        assert len(tokens) == embeddings.shape[1], (
+            "Number of tokens and embeddings must match."
+        )
         new_embeddings = []
         for idx, token in enumerate(tokens):
-
             if has_special_tokens and (idx == 0 or idx == len(tokens) - 1):
                 new_embeddings.append(embeddings[:, [idx]])  # (1, 768)
                 continue
@@ -1442,7 +1443,6 @@ class GROVEREmbedder(BaseEmbedder):
         embeddings = []
         with torch.no_grad():
             for sequence in tqdm(sequences, disable=disable_tqdm):
-
                 # pre-tokenize to BPE words
                 sequence_toks = self.max_match_tokenize(sequence)
                 chunks = [
@@ -1451,14 +1451,15 @@ class GROVEREmbedder(BaseEmbedder):
                 ]  # split bpe tokens into chunks
                 embedded_chunks = []
                 for n_chunk, chunk in enumerate(chunks):
-
                     input_ids = self.tokenizer(
                         " ".join(chunk),
                         return_tensors="pt",
                         return_attention_mask=False,
                         return_token_type_ids=False,
                     )["input_ids"]
-                    output = self.model(input_ids.to(self.device))[0].detach().cpu().numpy()
+                    output = (
+                        self.model(input_ids.to(self.device))[0].detach().cpu().numpy()
+                    )
 
                     if upsample_embeddings:
                         output = self._repeat_embedding_vectors(
@@ -1483,13 +1484,13 @@ class GROVEREmbedder(BaseEmbedder):
                     embedding = embedding[:, 1:-1]
 
                 if upsample_embeddings and remove_special_tokens:
-                    assert (
-                        len(sequence) == embedding.shape[1]
-                    ), f"Number of tokens and embeddings must match. {len(sequence)} != {embedding.shape[1]}"
+                    assert len(sequence) == embedding.shape[1], (
+                        f"Number of tokens and embeddings must match. {len(sequence)} != {embedding.shape[1]}"
+                    )
                 elif upsample_embeddings:
-                    assert (
-                        len(sequence) + 2 == embedding.shape[1]
-                    ), f"Number of tokens and embeddings must match. {len(sequence)+ 2} != {embedding.shape[1]}"
+                    assert len(sequence) + 2 == embedding.shape[1], (
+                        f"Number of tokens and embeddings must match. {len(sequence) + 2} != {embedding.shape[1]}"
+                    )
 
                 embeddings.append(embedding)
 
@@ -1505,12 +1506,11 @@ class GROVEREmbedder(BaseEmbedder):
         Byte-pair encoding merges a variable number of letters into one token.
         We need to repeat each token's embedding vector for each letter in the token.
         """
-        assert (
-            len(tokens) == embeddings.shape[1]
-        ), "Number of tokens and embeddings must match."
+        assert len(tokens) == embeddings.shape[1], (
+            "Number of tokens and embeddings must match."
+        )
         new_embeddings = []
         for idx, token in enumerate(tokens):
-
             if has_special_tokens and (idx == 0 or idx == len(tokens) - 1):
                 new_embeddings.append(embeddings[:, [idx]])  # (1, 768)
                 continue
@@ -1526,7 +1526,6 @@ class GROVEREmbedder(BaseEmbedder):
 
 
 class CaduceusEmbedder(BaseEmbedder):
-
     def load_model(
         self,
         model_name: str = "kuleshov-group/caduceus-ph_seqlen-131k_d_model-256_n_layer-16",
@@ -1648,9 +1647,7 @@ class CaduceusEmbedder(BaseEmbedder):
                             input_ids=input_ids.to(self.device),
                             output_hidden_states=False,
                             return_dict=True,
-                        )[
-                            "logits"
-                        ]  # (1, seq_len, 16)
+                        )["logits"]  # (1, seq_len, 16)
                         out = out[
                             :, :, 7:12
                         ]  # 0-6 are special tokens. vocab_size is only 12 so last 4 dimensions are dead.
@@ -1749,7 +1746,6 @@ class OneHotEmbedder(BaseEmbedder):
 
 class EncodeSequence:
     def __init__(self, nucleotide_categories=categories_4_letters_unknown):
-
         self.nucleotide_categories = nucleotide_categories
 
         self.label_encoder = LabelEncoder().fit(self.nucleotide_categories)

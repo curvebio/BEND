@@ -14,7 +14,6 @@ from bend.utils import Annotation, embedders
 
 
 def main():
-
     parser = argparse.ArgumentParser("Compute embeddings")
     parser.add_argument("bed_file", type=str, help="Path to the bed file")
     parser.add_argument("out_file", type=str, help="Path to the output file")
@@ -108,7 +107,6 @@ def main():
     genome_annotation.annotation["distance"] = None
 
     for index, row in tqdm(genome_annotation.annotation.iterrows()):
-
         # middle_point = row['start'] + 256
         # index the right embedding with dna[len(dna)//2]
         dna = genome_annotation.get_dna_segment(index=index)

@@ -35,13 +35,13 @@ def rec(link, destination="./"):
     f = get_soup(link)
     for child in f:
         if child.get("title") == "open":
-            link = f'{base_link}{child.get("href")}'
+            link = f"{base_link}{child.get('href')}"
             child_path = child.get("href")[27:]
             os.makedirs(f"{destination}/{os.path.dirname(child_path)}", exist_ok=True)
             print(f"{destination}/{child_path}")
             download_file(link, f"{destination}/{child_path}")
         else:
-            link = f'{base_link}cgi-sid/{child.get("href")}'
+            link = f"{base_link}cgi-sid/{child.get('href')}"
             rec(link, destination)
 
 
