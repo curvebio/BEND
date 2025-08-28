@@ -60,5 +60,9 @@ params:
     - 82.86
   metric : auprc
   activation : none
+  # Early stopping configuration
+  early_stopping_patience: 5
+  early_stopping_min_delta: 0.0
+  early_stopping_mode: "max"
 wandb:
   mode : disabled 

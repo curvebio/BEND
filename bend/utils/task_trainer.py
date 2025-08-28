@@ -237,6 +237,16 @@ class BaseTrainer:
         self.scaler = (
             torch.cuda.amp.GradScaler()
         )  # init scaler for mixed precision training
+        
+        # Early stopping parameters
+        self.early_stopping_patience = getattr(self.config.params, 'early_stopping_patience', None)
+        self.early_stopping_min_delta = getattr(self.config.params, 'early_stopping_min_delta', 0.0)
+        self.early_stopping_mode = getattr(self.config.params, 'early_stopping_mode', 'max')  # 'max' for metrics like accuracy, 'min' for loss
+        
+        # Initialize early stopping tracking variables
+        self.best_metric = None
+        self.patience_counter = 0
+        self.early_stopped = False
 
     def _create_output_dir(self, path):
         os.makedirs(f"{path}/checkpoints/", exist_ok=True)
@@ -323,6 +333,51 @@ class BaseTrainer:
 
         # wandb.log({"Training latent with labels": wandb.Image(plt)})
         return
+    
+    def _check_early_stopping(self, val_metric):
+        """
+        Check if early stopping criteria are met.
+        
+        Parameters
+        ----------
+        val_metric : float
+            The current validation metric value.
+            
+        Returns
+        -------
+        bool
+            True if training should stop, False otherwise.
+        """
+        if self.early_stopping_patience is None:
+            return False
+            
+        if self.best_metric is None:
+            self.best_metric = val_metric
+            self.patience_counter = 0
+            return False
+            
+        # Check if current metric is better than best
+        improved = False
+        if self.early_stopping_mode == 'max':
+            # For metrics like accuracy, AUC, etc. where higher is better
+            improved = val_metric > (self.best_metric + self.early_stopping_min_delta)
+        else:  # mode == 'min'
+            # For metrics like loss where lower is better
+            improved = val_metric < (self.best_metric - self.early_stopping_min_delta)
+            
+        if improved:
+            self.best_metric = val_metric
+            self.patience_counter = 0
+            print(f"Validation metric improved to {val_metric:.6f}")
+        else:
+            self.patience_counter += 1
+            print(f"No improvement in validation metric. Patience: {self.patience_counter}/{self.early_stopping_patience}")
+            
+        if self.patience_counter >= self.early_stopping_patience:
+            print(f"Early stopping triggered after {self.patience_counter} epochs without improvement")
+            return True
+            
+        return False
 
     def _calculate_metric(self, y_true, y_pred) -> List[float]:
         """
@@ -497,7 +552,9 @@ class BaseTrainer:
             )
 
         for epoch in range(1 + start_epoch, epochs + 1):
+            print("Training epoch:", epoch)
             train_loss = self.train_epoch(train_loader)
+            print("Validating epoch:", epoch)
             val_loss, val_metrics = self.validate(val_loader)
             val_metric = val_metrics[0]
             # test_loss, test_metric = self.test(test_loader, overwrite=False)
@@ -511,6 +568,15 @@ class BaseTrainer:
             print(
                 f"Epoch: {epoch}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val {self.config.params.metric}: {val_metric:.4f}"
             )
+            
+            # Check for early stopping
+            if self._check_early_stopping(val_metric):
+                print(f"Early stopping at epoch {epoch}")
+                self.early_stopped = True
+                break
+        
+        if not self.early_stopped and self.early_stopping_patience is not None:
+            print(f"Training completed normally after {epochs} epochs")
         return
 
     def train_step(self, batch, idx=0):
