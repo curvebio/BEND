@@ -6,8 +6,10 @@ Utilities for processing genome coordinate-based sequence data to embeddings.
 
 import h5py
 import numpy as np
+import os
 import pandas as pd
 import pysam
+import tarfile
 import webdataset as wds
 from tqdm.auto import tqdm
 
@@ -57,6 +59,44 @@ def reverse_complement(dna_string: str):
     complement = [baseComplement.get(base, "N") for base in dna_string]
     reversed_complement = reversed(complement)
     return "".join(list(reversed_complement))
+
+
+def check_existing_output(output_path, expected_size):
+    """
+    Check if output file exists and has the expected number of samples.
+    
+    Parameters
+    ----------
+    output_path : str
+        Path to the output tar.gz file.
+    expected_size : int
+        Expected number of samples in the output file.
+        
+    Returns
+    -------
+    bool
+        True if file exists and has the expected size, False otherwise.
+    """
+    if not os.path.exists(output_path):
+        return False
+    
+    try:
+        # Open the tar.gz file and count the number of samples
+        with tarfile.open(output_path, 'r:gz') as tar:
+            # Count unique sample keys (each sample has input.npy and output.npy)
+            sample_keys = set()
+            for member in tar.getnames():
+                if member.endswith('.npy'):
+                    # Extract sample key from filename like "sample_123.input.npy"
+                    key_part = member.split('.')[0]
+                    sample_keys.add(key_part)
+            
+            actual_size = len(sample_keys)
+            print(f"Existing output has {actual_size} samples, expected {expected_size}")
+            return actual_size == expected_size
+    except Exception as e:
+        print(f"Error checking existing output: {e}")
+        return False
 
 
 # %%
@@ -159,9 +199,15 @@ def embed_from_bed(
             )
         f = f[chunk * chunk_size : (chunk + 1) * chunk_size].reset_index(drop=True)
 
+    # Check if output already exists and has the correct size
+    expected_size = len(f)
+    if check_existing_output(output_path, expected_size):
+        print(f"Output {output_path} already exists with correct size ({expected_size} samples). Skipping.")
+        return
+
     buffer_inputs = []
     buffer_labels = []
-    start_offset = chunk * chunk_size
+    start_offset = chunk * chunk_size if chunk is not None and chunk_size is not None else 0
     buffer_size = 5000
 
     sink = wds.TarWriter(output_path, compress=True)
