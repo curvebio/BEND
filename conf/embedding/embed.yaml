@@ -10,12 +10,10 @@ hydra :
   sweeper:
     params:
       model: 
-        # - hyenadna-medium-160k,
-        # - hyenadna-tiny-1k,
-        # - resnetlm,
-        # - nt_transformer_human_ref,
         # dnabert2,
-        hyenadna-medium-160k
+        dnabert2-bs-seq,
+        # hyenadna-bs-seq,
+        # hyenadna-medium-160k
             #  grover
              #hyenadna-small-32k,
              #hyenadna-medium-160k,
@@ -54,7 +52,18 @@ splits : null
 model : nt_transformer_1000g
 task : gene_finding
 device_id : null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
-# model instatiators 
+# model instantiators 
+dnabert2-bs-seq:
+  _target_ : bend.utils.embedders.DNABert2Embedder
+  model_name : ${embedders_dir}/dnabert2-bs-seq
+  upsample_embeddings : true
+  device_id : ${device_id}
+
+hyenadna-bs-seq:
+  _target_ : bend.utils.embedders.HyenaDNAEmbedder
+  model_path : ${embedders_dir}/hyenadna-bs-seq
+  device_id : ${device_id}
+
 dnabert2:
   _target_ : bend.utils.embedders.DNABert2Embedder
   model_name : zhihan1996/DNABERT-2-117M
