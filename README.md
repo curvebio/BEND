@@ -207,6 +207,62 @@ from bend.utils.embedders import HyenaDNAEmbedder
 embedder = HyenaDNAEmbedder('pretrained_models/hyenadna/hyenadna-tiny-1k-seqlen')
 ```
 
+#### BS-seq Pretrained Models
+
+BEND now includes support for models that have been continuously pretrained on bisulfite-sequencing (BS-seq) data. These models are fine-tuned versions of existing architectures that have been further trained to understand methylation patterns and modified DNA sequences.
+
+**Available BS-seq Models:**
+
+| Model | Base Architecture | Description | Configuration |
+| --- | --- | --- | --- |
+| `dnabert2-bs-seq` | DNABERT-2 | DNABERT-2 continuously pretrained on BS-seq data | Uses `DNABert2Embedder` |
+| `hyenadna-bs-seq` | HyenaDNA | HyenaDNA continuously pretrained on BS-seq data | Uses `HyenaDNAEmbedder` |
+
+**Setting up BS-seq Models:**
+
+To use these models, you need to download the pretrained checkpoints from Google Cloud Storage and configure them locally:
+
+```bash
+# Download DNABERT-2 BS-seq checkpoint
+mkdir -p ./pretrained_models/dnabert2-bs-seq
+gsutil -m cp -r gs://curvebio-mahdibaghbanzadeh/neurips_2025/pretrain_dnabert2_s3/checkpoint-100000/* ./pretrained_models/dnabert2-bs-seq/
+
+# Download HyenaDNA BS-seq checkpoint  
+mkdir -p ./pretrained_models/hyenadna-bs-seq
+gsutil -m cp -r gs://curvebio-mahdibaghbanzadeh/neurips_2025/pretrain_hyena_s3/checkpoint-100000/* ./pretrained_models/hyenadna-bs-seq/
+```
+
+**Usage:**
+
+```python
+# Using DNABERT-2 BS-seq model
+from bend.utils.embedders import DNABert2Embedder
+embedder = DNABert2Embedder('pretrained_models/dnabert2-bs-seq')
+embeddings = embedder.embed(['AGGATGCCGAGAGTATATGGGA'])
+
+# Using HyenaDNA BS-seq model
+from bend.utils.embedders import HyenaDNAEmbedder  
+embedder = HyenaDNAEmbedder('pretrained_models/hyenadna-bs-seq')
+embeddings = embedder.embed(['AGGATGCCGAGAGTATATGGGA'])
+```
+
+**Running with BS-seq Models:**
+
+```bash
+# Precompute embeddings with BS-seq models
+python scripts/precompute_embeddings.py model=dnabert2-bs-seq task=gene_finding
+python scripts/precompute_embeddings.py model=hyenadna-bs-seq task=cpg_methylation
+
+# Train downstream tasks
+python scripts/train_on_task.py --config-name cpg_methylation embedder=dnabert2-bs-seq,hyenadna-bs-seq
+```
+
+These BS-seq models are particularly well-suited for tasks involving:
+- CpG methylation prediction
+- Chromatin accessibility analysis  
+- Epigenetic modifications
+- Any task where understanding of methylation patterns is important
+
 
 ### 5. Evaluating models
 
@@ -248,12 +304,14 @@ And the list of available embedders/models used for training on the tasks are :
 - `onehot`
 - `nt_transformer_1000g`
 - `dnabert2`
+- `dnabert2-bs-seq`
 - `gena-lm-bigbird-base-t2t`
 - `gena-lm-bert-large-t2`
 - `hyenadna-large-1m`
 - `hyenadna-tiny-1k`
 - `hyenadna-small-32k`
 - `hyenadna-medium-160k`
+- `hyenadna-bs-seq`
 - `grover`
 
 

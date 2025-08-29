@@ -8,7 +8,7 @@ downsteam tasks on embeddings saved in webdataset .tar.gz format.
 import glob
 import os
 from functools import partial
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
 # create torch dataset & dataloader from webdataset
 import torch
@@ -86,7 +86,7 @@ def return_dataloader(
     batch_size: int = 8,
     num_workers: int = 0,
     padding_value=-100,
-    shuffle: int = None,
+    shuffle: Optional[int] = None,
 ):
     """
     Function to return a dataloader from a list of tar files or a single one.
@@ -108,7 +108,20 @@ def return_dataloader(
     # '''Load data to dataloader from a list of paths or a single path'''
     if isinstance(data, str):
         data = [data]
-    dataset = wds.WebDataset(data)
+    
+    # Check if we have fewer shards than workers and adjust accordingly
+    if num_workers > len(data):
+        print(f"Warning: num_workers ({num_workers}) > number of shards ({len(data)}). "
+              f"Setting num_workers to {len(data)} to avoid WebDataset errors.")
+        num_workers = max(0, len(data) - 1)  # Use one fewer to be safe
+    
+    # Create WebDataset with empty_check=False to handle shard/worker mismatch
+    try:
+        dataset = wds.WebDataset(data, empty_check=True)
+    except Exception as e:
+        print(f"Warning: error creating WebDataset: {e}. Switching to non-empty check mode.")
+        dataset = wds.WebDataset(data, empty_check=False)
+
     if shuffle is not None:
         dataset = dataset.shuffle(shuffle)
     dataset = dataset.decode()  # iterator over samples - each sample is dict with keys "input.npy" and "output.npy"
@@ -130,7 +143,7 @@ def return_dataloader(
         dataset, 
         num_workers=num_workers, 
         batch_size=None, 
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=torch.cuda.is_available() and num_workers > 0,  # pin_memory only makes sense with num_workers>0
         prefetch_factor=2 if num_workers > 0 else None,
         persistent_workers=num_workers > 0,  # Keep workers alive between epochs
     )
@@ -140,14 +153,14 @@ def return_dataloader(
 
 def get_data(
     data_dir: str,
-    train_data: List[str] = None,
-    valid_data: List[str] = None,
-    test_data: List[str] = None,
+    train_data: Optional[List[str]] = None,
+    valid_data: Optional[List[str]] = None,
+    test_data: Optional[List[str]] = None,
     cross_validation: Union[bool, int] = False,
     batch_size: int = 8,
     num_workers: int = 32,
     padding_value=-100,
-    shuffle: int = None,
+    shuffle: Optional[int] = None,
     **kwargs,
 ):
     """
@@ -198,15 +211,15 @@ def get_data(
         tars = glob.glob(f"{data_dir}/*.tar.gz")
         # sort tar files
         tars = sorted(tars, key=lambda x: int(x.split("/")[-1].split(".")[0][4:]))
-        test_data = tars[cross_validation]
+        test_data = [tars[cross_validation]]  # Make it a list for consistency
         # get valid data, cycle through tar.gz if test set is the last one
         if cross_validation == len(tars) - 1:
-            valid_data = tars[0]
+            valid_data = [tars[0]]  # Make it a list for consistency
         else:
-            valid_data = tars[cross_validation + 1]
+            valid_data = [tars[cross_validation + 1]]  # Make it a list for consistency
         # get train data, remove test and valid data from list of tar files
-        tars.remove(test_data)
-        tars.remove(valid_data)
+        tars.remove(test_data[0])  # Remove the actual string, not the list
+        tars.remove(valid_data[0])  # Remove the actual string, not the list
         train_data = tars
 
     # TODO chunking loading done right - need to support both this and the commented out block.
