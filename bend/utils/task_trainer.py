@@ -205,6 +205,7 @@ class BaseTrainer:
         config,
         overwrite_dir=False,
         gradient_accumulation_steps: int = 1,
+        amp_dtype: str = "auto",
     ):
         """
         Get a BaseTrainer object that can be used to train a model.
@@ -233,6 +234,9 @@ class BaseTrainer:
             Whether to overwrite the output directory. The default is False.
         gradient_accumulation_steps : int, optional
             Number of gradient accumulation steps. The default is 1.
+        amp_dtype : str, optional
+            AMP dtype to use. Options: "bf16", "fp16", "none", "auto".
+            "auto" will select the best available option. The default is "auto".
         """
 
         self.model = model
@@ -241,13 +245,17 @@ class BaseTrainer:
         self.device = device
         self.config = config
         self.overwrite_dir = overwrite_dir
+        self.amp_dtype = amp_dtype
         self._create_output_dir(
             self.config.output_dir
         )  # create the output dir for the model
         self.gradient_accumulation_steps = gradient_accumulation_steps
-        self.scaler = (
-            torch.cuda.amp.GradScaler()
-        )  # init scaler for mixed precision training
+        
+        # Initialize scaler only if using mixed precision
+        if self.amp_dtype in ["bf16", "fp16"]:
+            self.scaler = torch.cuda.amp.GradScaler()
+        else:
+            self.scaler = None
         
         # Set random seed for reproducibility
         random_seed = getattr(self.config.params, "random_seed", 0)
@@ -766,7 +774,37 @@ class BaseTrainer:
         self.model.train()
 
         data, target = batch
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
+        
+        # Apply mixed precision if enabled
+        if self.amp_dtype == "bf16":
+            dtype = torch.bfloat16
+        elif self.amp_dtype == "fp16":
+            dtype = torch.float16
+        else:
+            dtype = None  # No mixed precision
+            
+        if dtype is not None:
+            with torch.autocast(device_type="cuda", dtype=dtype):
+                output = self.model(
+                    x=data.to(self.device, non_blocking=True),
+                    length=target.shape[-1],
+                    activation=self.config.params.activation,
+                )
+
+                loss = self.criterion(
+                    output, target.to(self.device, non_blocking=True).long()
+                )
+                loss = loss / self.gradient_accumulation_steps
+            
+            # Use scaler for mixed precision
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                if (idx + 1) % self.gradient_accumulation_steps == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad(set_to_none=True)
+        else:
+            # No mixed precision - standard forward pass
             output = self.model(
                 x=data.to(self.device, non_blocking=True),
                 length=target.shape[-1],
@@ -777,13 +815,11 @@ class BaseTrainer:
                 output, target.to(self.device, non_blocking=True).long()
             )
             loss = loss / self.gradient_accumulation_steps
-            # Accumulates scaled gradients.
-            self.scaler.scale(loss).backward()
-            if (
-                (idx + 1) % self.gradient_accumulation_steps == 0
-            ):  # or (idx + 1 == len_dataloader):
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+            
+            # Standard backward pass without scaler
+            loss.backward()
+            if (idx + 1) % self.gradient_accumulation_steps == 0:
+                self.optimizer.step()
                 self.optimizer.zero_grad(set_to_none=True)
 
         return loss.item()

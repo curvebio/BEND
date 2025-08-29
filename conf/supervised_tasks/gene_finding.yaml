@@ -1,12 +1,12 @@
 defaults:
   - datadims : [label_dims,embedding_dims, downstream_downsample]
   - supervised_encoder : [resnet-supervised, basset-supervised]
-  - hydra : multirun 
-  - override hydra/launcher: joblib # ability to launch jobs in parallel fashion
+  - override hydra/launcher: basic  # Use basic launcher instead of joblib to avoid multiprocessing conflicts
   - _self_
 hydra :
   searchpath:
     - file://conf 
+  mode: MULTIRUN  # Explicit multirun mode
   sweeper:
     params:
       embedder : gena-lm-bigbird-base-t2t,
@@ -44,7 +44,7 @@ data:
   _target_: bend.utils.data_downstream.get_data
   cross_validation : false
   batch_size : 256
-  num_workers : 0
+  num_workers : 4
   padding_value : -100
   shuffle : 1000
   parent_dir : ./data
@@ -60,10 +60,17 @@ params:
   activation : none
   device_id: null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
   random_seed: 0  # Random seed for reproducibility (default: 0)
+  use_ddp: false  # Disable DDP for multirun to avoid multiprocessing conflicts
   # Early stopping configuration
   early_stopping_patience: 15
   early_stopping_min_delta: 0.0
   early_stopping_mode: "max"
   save_top_k_checkpoints: 3 
+  # AMP Configuration - Choose one:
+  # "auto" - automatically select best option based on hardware (default)
+  # "bf16" - bfloat16 for A100/H100 GPUs (best performance on modern hardware)
+  # "fp16" - float16 for older GPUs (V100, RTX series, etc.)
+  # "none" - disable mixed precision training (for debugging or older hardware)
+  amp_dtype: "auto"
 wandb:
   mode : disabled 

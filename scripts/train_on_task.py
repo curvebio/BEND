@@ -7,6 +7,7 @@ Supports both regular DataParallel and Distributed Data Parallel (DDP) training.
 
 import os
 import sys
+import multiprocessing as mp
 
 import hydra
 import torch
@@ -23,6 +24,13 @@ from bend.utils.task_trainer import (
 )
 from bend.utils.ddp_task_trainer import launch_ddp_training
 from bend.utils.seed_utils import set_seed
+
+# Set multiprocessing start method early to avoid conflicts
+try:
+    mp.set_start_method("spawn", force=True)
+except RuntimeError:
+    # Start method already set
+    pass
 
 os.environ["WDS_VERBOSE_CACHE"] = "1"
 
@@ -184,6 +192,33 @@ def run_experiment(cfg: DictConfig) -> None:
 
     # init dataloaders - this was already done above, so we can remove the duplicate
 
+    # Configure Automatic Mixed Precision (AMP)
+    amp_dtype = getattr(cfg.params, "amp_dtype", "auto")  # Options: "bf16", "fp16", "none", "auto"
+    
+    if amp_dtype == "auto":
+        # Auto-select best dtype based on hardware
+        if torch.cuda.is_bf16_supported():
+            amp_dtype = "bf16"
+            print("Auto-selected bfloat16 for mixed precision training (A100/H100 optimized)")
+        elif torch.cuda.is_available():
+            amp_dtype = "fp16"
+            print("Auto-selected float16 for mixed precision training")
+        else:
+            amp_dtype = "none"
+            print("CUDA not available, disabling mixed precision training")
+    elif amp_dtype == "bf16":
+        if not torch.cuda.is_bf16_supported():
+            print("Warning: bfloat16 not supported on this hardware, falling back to float16")
+            amp_dtype = "fp16"
+        else:
+            print("Using bfloat16 for mixed precision training")
+    elif amp_dtype == "fp16":
+        print("Using float16 for mixed precision training")
+    elif amp_dtype == "none":
+        print("Mixed precision training disabled")
+    else:
+        raise ValueError(f"Invalid amp_dtype: {amp_dtype}. Choose from: 'bf16', 'fp16', 'none', 'auto'")
+
     # instantiate trainer
     trainer = BaseTrainer(
         model=model,
@@ -192,6 +227,7 @@ def run_experiment(cfg: DictConfig) -> None:
         device=device,
         config=cfg,
         overwrite_dir=True,
+        amp_dtype=amp_dtype,
     )
 
     if cfg.params.mode == "train":

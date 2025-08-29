@@ -126,7 +126,14 @@ def return_dataloader(
         partial(collate_fn_pad_to_longest, padding_value=padding_value)
     )
 
-    dataloader = wds.WebLoader(dataset, num_workers=num_workers, batch_size=None)
+    dataloader = wds.WebLoader(
+        dataset, 
+        num_workers=num_workers, 
+        batch_size=None, 
+        pin_memory=torch.cuda.is_available(),
+        prefetch_factor=2 if num_workers > 0 else None,
+        persistent_workers=num_workers > 0,  # Keep workers alive between epochs
+    )
 
     return dataloader
 

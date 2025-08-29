@@ -78,6 +78,7 @@ class DDPTrainer:
         world_size=1,
         overwrite_dir=False,
         gradient_accumulation_steps: int = 1,
+        amp_dtype: str = "auto",
     ):
         """
         Get a DDPTrainer object that can be used to train a model.
@@ -102,6 +103,8 @@ class DDPTrainer:
             Whether to overwrite the output directory. The default is False.
         gradient_accumulation_steps : int, optional
             Number of gradient accumulation steps. The default is 1.
+        amp_dtype : str, optional
+            AMP dtype to use. Options: "bf16", "fp16", "none", "auto".
         """
 
         self.model = model
@@ -114,7 +117,13 @@ class DDPTrainer:
         self.is_main_process = rank == 0
         self.overwrite_dir = overwrite_dir
         self.gradient_accumulation_steps = gradient_accumulation_steps
-        self.scaler = torch.cuda.amp.GradScaler()
+        self.amp_dtype = amp_dtype
+        
+        # Initialize scaler only if using mixed precision
+        if self.amp_dtype in ["bf16", "fp16"]:
+            self.scaler = torch.cuda.amp.GradScaler()
+        else:
+            self.scaler = None
 
         # Set random seed for reproducibility (each process gets the same base seed + rank)
         random_seed = getattr(self.config.params, "random_seed", 0)
@@ -425,7 +434,37 @@ class DDPTrainer:
         self.model.train()
 
         data, target = batch
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
+        
+        # Apply mixed precision if enabled
+        if self.amp_dtype == "bf16":
+            dtype = torch.bfloat16
+        elif self.amp_dtype == "fp16":
+            dtype = torch.float16
+        else:
+            dtype = None  # No mixed precision
+            
+        if dtype is not None:
+            with torch.autocast(device_type="cuda", dtype=dtype):
+                output = self.model(
+                    x=data.to(self.device, non_blocking=True),
+                    length=target.shape[-1],
+                    activation=self.config.params.activation,
+                )
+
+                loss = self.criterion(
+                    output, target.to(self.device, non_blocking=True).long()
+                )
+                loss = loss / self.gradient_accumulation_steps
+
+            # Use scaler for mixed precision
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                if (idx + 1) % self.gradient_accumulation_steps == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad(set_to_none=True)
+        else:
+            # No mixed precision - standard forward pass
             output = self.model(
                 x=data.to(self.device, non_blocking=True),
                 length=target.shape[-1],
@@ -436,13 +475,12 @@ class DDPTrainer:
                 output, target.to(self.device, non_blocking=True).long()
             )
             loss = loss / self.gradient_accumulation_steps
-
-        self.scaler.scale(loss).backward()
-
-        if (idx + 1) % self.gradient_accumulation_steps == 0:
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.optimizer.zero_grad(set_to_none=True)
+            
+            # Standard backward pass without scaler
+            loss.backward()
+            if (idx + 1) % self.gradient_accumulation_steps == 0:
+                self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
 
         return loss.item()
 
@@ -983,6 +1021,16 @@ def ddp_worker(rank, world_size, port, cfg):
         if criterion is None:
             raise ValueError(f"Unknown criterion: {cfg.params.criterion}")
 
+        # Configure AMP dtype (passed from main script)
+        amp_dtype = getattr(cfg.params, "amp_dtype", "auto")
+        if rank == 0:
+            if amp_dtype == "bf16":
+                print("Using bfloat16 for mixed precision training (A100 optimized)")
+            elif amp_dtype == "fp16":
+                print("Using float16 for mixed precision training")
+            elif amp_dtype == "none":
+                print("Mixed precision training disabled")
+
         # Create trainer
         trainer = DDPTrainer(
             model=model,
@@ -993,6 +1041,7 @@ def ddp_worker(rank, world_size, port, cfg):
             rank=rank,
             world_size=world_size,
             overwrite_dir=True,
+            amp_dtype=amp_dtype,
         )
 
         if rank == 0:

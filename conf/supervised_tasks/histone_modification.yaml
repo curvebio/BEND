@@ -68,6 +68,12 @@ params:
   save_top_k_checkpoints: 3 
   device_id: null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
   random_seed: 0  # Random seed for reproducibility (default: 0)
+  # AMP Configuration - Choose one:
+  # "auto" - automatically select best option based on hardware (default)
+  # "bf16" - bfloat16 for A100/H100 GPUs (best performance on modern hardware)
+  # "fp16" - float16 for older GPUs (V100, RTX series, etc.)
+  # "none" - disable mixed precision training (for debugging or older hardware)
+  amp_dtype: "auto"
 wandb:
   mode : disabled 
 
