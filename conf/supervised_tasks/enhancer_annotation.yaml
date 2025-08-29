@@ -66,5 +66,6 @@ params:
   early_stopping_min_delta: 0.0
   early_stopping_mode: "max"
   save_top_k_checkpoints: 3 
+  random_seed: 0  # Random seed for reproducibility (default: 0)
 wandb:
   mode : disabled 

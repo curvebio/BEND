@@ -66,6 +66,7 @@ params:
   early_stopping_mode: "max"
   save_top_k_checkpoints: 3 
   device_id: null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
+  random_seed: 0  # Random seed for reproducibility (default: 0)
 wandb:
   mode : disabled 
 

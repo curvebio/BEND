@@ -59,6 +59,7 @@ params:
   metric : mcc
   activation : none
   device_id: null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
+  random_seed: 0  # Random seed for reproducibility (default: 0)
   # Early stopping configuration
   early_stopping_patience: 15
   early_stopping_min_delta: 0.0

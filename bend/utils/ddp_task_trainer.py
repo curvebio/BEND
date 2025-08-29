@@ -35,6 +35,7 @@ from .task_trainer import (
     BCEWithLogitsLoss,
     MSELoss,
 )
+from .seed_utils import set_seed
 
 
 def find_free_port():
@@ -114,6 +115,11 @@ class DDPTrainer:
         self.overwrite_dir = overwrite_dir
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.scaler = torch.cuda.amp.GradScaler()
+
+        # Set random seed for reproducibility (each process gets the same base seed + rank)
+        random_seed = getattr(self.config.params, "random_seed", 0)
+        process_seed = random_seed + rank  # Each process gets a unique but deterministic seed
+        set_seed(process_seed)
 
         # Early stopping parameters (only tracked on main process)
         if self.is_main_process:

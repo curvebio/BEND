@@ -24,6 +24,8 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
+from .seed_utils import set_seed
+
 
 class CrossEntropyLoss(nn.Module):
     """
@@ -246,6 +248,10 @@ class BaseTrainer:
         self.scaler = (
             torch.cuda.amp.GradScaler()
         )  # init scaler for mixed precision training
+        
+        # Set random seed for reproducibility
+        random_seed = getattr(self.config.params, "random_seed", 0)
+        set_seed(random_seed)
 
         # Early stopping parameters
         self.early_stopping_patience = getattr(

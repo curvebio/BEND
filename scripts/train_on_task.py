@@ -22,6 +22,7 @@ from bend.utils.task_trainer import (
     PoissonLoss,
 )
 from bend.utils.ddp_task_trainer import launch_ddp_training
+from bend.utils.seed_utils import set_seed
 
 os.environ["WDS_VERBOSE_CACHE"] = "1"
 
@@ -40,6 +41,10 @@ def run_experiment(cfg: DictConfig) -> None:
     cfg : DictConfig
         Hydra configuration object.
     """
+    # Set random seed early for reproducibility
+    random_seed = getattr(cfg.params, "random_seed", 0)
+    set_seed(random_seed)
+    
     # Check if we should use DDP training (default for single GPU)
     use_ddp = getattr(cfg.params, "use_ddp", False) and torch.cuda.device_count() > 1
 
