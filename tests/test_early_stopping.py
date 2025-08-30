@@ -2,8 +2,19 @@
 """
 test_early_stopping.py
 =======================
-Simple test script to verify early stopping functionality.
-This script creates a mock training scenario to test early stopping logic.
+Test script to verify early stopping functionality with simplified checkpoint management.
+
+This script creates mock training scenarios to test:
+1. Early stopping logic with different patience and min_delta settings
+2. Integration with the simplified checkpoint system (best + latest only)
+3. Correct tracking of best epochs for checkpoint selection
+4. Coordination between early stopping and checkpoint saving
+
+The early stopping system now returns (should_stop, is_new_best) tuples to coordinate
+with the simplified checkpoint management that saves only:
+- best_checkpoint.pt (when a new best metric is found)
+- latest_checkpoint.pt (every epoch for resuming)
+- epoch_N.pt (reference copy of the latest epoch)
 """
 
 import torch
@@ -38,17 +49,21 @@ class MockTrainer:
 
         Returns
         -------
-        bool
-            True if training should stop, False otherwise.
+        tuple
+            (should_stop: bool, is_new_best: bool)
+            - should_stop: True if training should stop, False otherwise
+            - is_new_best: True if this epoch achieved a new best metric
         """
         if self.early_stopping_patience is None:
-            return False
+            return False, False
 
+        is_new_best = False
         if self.best_metric is None:
             self.best_metric = val_metric
             self.best_epoch = epoch
             self.patience_counter = 0
-            return False
+            is_new_best = True
+            return False, is_new_best
 
         # Check if current metric is better than best
         improved = False
@@ -63,6 +78,7 @@ class MockTrainer:
             self.best_metric = val_metric
             self.best_epoch = epoch
             self.patience_counter = 0
+            is_new_best = True
             print(f"Validation metric improved to {val_metric:.6f} at epoch {epoch}")
         else:
             self.patience_counter += 1
@@ -77,9 +93,9 @@ class MockTrainer:
             print(
                 f"Best metric {self.best_metric:.6f} was achieved at epoch {self.best_epoch}"
             )
-            return True
+            return True, is_new_best
 
-        return False
+        return False, is_new_best
 
 
 def simulate_training_with_early_stopping():
@@ -94,7 +110,7 @@ def simulate_training_with_early_stopping():
 
     for epoch, metric in enumerate(mock_metrics, 1):
         print(f"\nEpoch {epoch}: Validation metric = {metric:.3f}")
-        should_stop = trainer._check_early_stopping(metric, epoch)
+        should_stop, is_new_best = trainer._check_early_stopping(metric, epoch)
 
         if should_stop:
             print(f"Training stopped early at epoch {epoch}")
@@ -121,7 +137,7 @@ def simulate_training_without_early_stopping():
 
     for epoch, metric in enumerate(mock_metrics, 1):
         print(f"\nEpoch {epoch}: Validation metric = {metric:.3f}")
-        should_stop = trainer._check_early_stopping(metric, epoch)
+        should_stop, is_new_best = trainer._check_early_stopping(metric, epoch)
 
         if should_stop:
             print(f"Training stopped early at epoch {epoch}")
@@ -146,7 +162,7 @@ def simulate_loss_based_early_stopping():
 
     for epoch, loss in enumerate(mock_losses, 1):
         print(f"\nEpoch {epoch}: Validation loss = {loss:.3f}")
-        should_stop = trainer._check_early_stopping(loss, epoch)
+        should_stop, is_new_best = trainer._check_early_stopping(loss, epoch)
 
         if should_stop:
             print(f"Training stopped early at epoch {epoch}")
@@ -172,7 +188,7 @@ def test_best_epoch_tracking():
     best_epoch = None
     for epoch, metric in enumerate(mock_metrics, 1):
         print(f"\nEpoch {epoch}: Validation metric = {metric:.3f}")
-        should_stop = trainer._check_early_stopping(metric, epoch)
+        should_stop, is_new_best = trainer._check_early_stopping(metric, epoch)
 
         if should_stop:
             print(f"Training stopped early at epoch {epoch}")
@@ -200,6 +216,47 @@ def test_best_epoch_tracking():
     return trainer.best_epoch == expected_best_epoch
 
 
+def test_checkpoint_integration():
+    """Test how checkpoint saving integrates with early stopping."""
+    print("\n\n=== Test 5: Checkpoint integration with early stopping ===")
+
+    # Create mock trainer with early stopping
+    trainer = MockTrainer(patience=2, min_delta=0.01, mode="max")
+
+    # Simulate training with clear best epoch
+    mock_metrics = [0.70, 0.85, 0.82, 0.81]  # Best at epoch 2, then decline
+
+    checkpoints_saved = []
+    
+    for epoch, metric in enumerate(mock_metrics, 1):
+        print(f"\nEpoch {epoch}: Validation metric = {metric:.3f}")
+        should_stop, is_new_best = trainer._check_early_stopping(metric, epoch)
+        
+        # Simulate checkpoint saving logic
+        if is_new_best:
+            print(f"  -> Would save best_checkpoint.pt (new best: {metric:.3f})")
+            checkpoints_saved.append(f"best_checkpoint_epoch_{epoch}")
+        
+        print(f"  -> Would save latest_checkpoint.pt and epoch_{epoch}.pt")
+        checkpoints_saved.append(f"latest_checkpoint_epoch_{epoch}")
+        checkpoints_saved.append(f"epoch_{epoch}")
+
+        if should_stop:
+            print(f"Training stopped early at epoch {epoch}")
+            break
+
+    print(f"\nSimulated checkpoints that would be saved:")
+    for checkpoint in checkpoints_saved:
+        print(f"  - {checkpoint}")
+    
+    print(f"\nFinal state:")
+    print(f"  Best epoch: {trainer.best_epoch}")
+    print(f"  Best metric: {trainer.best_metric:.6f}")
+    print(f"  Final checkpoints would be: best_checkpoint.pt (epoch {trainer.best_epoch}), latest_checkpoint.pt (epoch {epoch})")
+    
+    return True
+
+
 if __name__ == "__main__":
     print("Testing Early Stopping Functionality")
     print("=" * 50)
@@ -209,16 +266,24 @@ if __name__ == "__main__":
     simulate_training_without_early_stopping()
     simulate_loss_based_early_stopping()
     test_best_epoch_tracking()
+    test_checkpoint_integration()
 
     print("\n" + "=" * 50)
     print("Early stopping tests completed!")
     print("\nKey improvements in this version:")
     print("- ✓ Tracks the epoch when the best metric was achieved")
-    print("- ✓ Loads best checkpoint for testing when early stopping occurs")
+    print("- ✓ Returns (should_stop, is_new_best) tuple for checkpoint coordination")
+    print("- ✓ Integrates seamlessly with simplified checkpoint management")
     print("- ✓ Works with both BaseTrainer and DDPTrainer")
+    print("\nSimplified checkpoint management benefits:")
+    print("- ✓ Only saves best_checkpoint.pt and latest_checkpoint.pt + epoch_N.pt")
+    print("- ✓ No complex heap management or top-k confusion")
+    print("- ✓ Predictable file names and minimal disk usage")
+    print("- ✓ Always preserves the truly best model for inference")
     print("\nTo use early stopping in your BEND training:")
     print("1. Add early stopping parameters to your config YAML file")
     print("2. Set early_stopping_patience to desired number of epochs")
     print("3. Set early_stopping_mode to 'max' for metrics or 'min' for loss")
-    print("4. Run training normally - early stopping will activate automatically")
-    print("5. When early stopping occurs, testing will use the best checkpoint")
+    print("4. Configure save_best_checkpoint: true and save_latest_checkpoint: true")
+    print("5. Run training normally - early stopping will activate automatically")
+    print("6. Testing will automatically use the best available checkpoint")

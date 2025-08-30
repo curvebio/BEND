@@ -222,14 +222,15 @@ class BaseTrainer:
             Device to use for training.
         config : OmegaConf
             Configuration object. Should include:
-            - config.params.save_top_k_checkpoints : int, optional
-                If specified, only the top k checkpoints with the best validation
-                metrics will be kept. Older, worse-performing checkpoints will be
-                automatically deleted to save disk space. If None (default), all
-                checkpoints will be saved.
+            - config.params.save_best_checkpoint : bool, optional
+                If True, saves the best checkpoint according to early stopping.
+                Default is True.
+            - config.params.save_latest_checkpoint : bool, optional
+                If True, saves the most recent checkpoint.
+                Default is True.
             - config.params.early_stopping_mode : str, optional
                 Determines whether validation metric should be maximized ('max')
-                or minimized ('min') for checkpoint ranking. Default is 'max'.
+                or minimized ('min'). Default is 'max'.
         overwrite_dir : bool, optional
             Whether to overwrite the output directory. The default is False.
         gradient_accumulation_steps : int, optional
@@ -272,16 +273,17 @@ class BaseTrainer:
             self.config.params, "early_stopping_mode", "max"
         )  # 'max' for metrics like accuracy, 'min' for loss
 
-        # Checkpoint management parameters
-        self.save_top_k_checkpoints = getattr(
-            self.config.params, "save_top_k_checkpoints", None
-        )  # None means save all checkpoints
+        # Checkpoint management parameters - simplified to best + latest
+        self.save_best_checkpoint = getattr(
+            self.config.params, "save_best_checkpoint", True
+        )  # Save the best checkpoint according to early stopping
+        self.save_latest_checkpoint = getattr(
+            self.config.params, "save_latest_checkpoint", True
+        )  # Save the most recent checkpoint
 
-        # Initialize heap for efficient checkpoint management
-        # For 'max' mode: use min heap (negate values) to keep top k largest values
-        # For 'min' mode: use max heap (regular values) to keep top k smallest values
-        self.checkpoint_heap = []  # List of tuples: (metric_value, epoch, checkpoint_path)
-        self.last_checkpoint_epoch = None  # Always keep the most recent checkpoint
+        # Track saved checkpoints for cleanup
+        self.best_checkpoint_path = None
+        self.latest_checkpoint_path = None
 
         # Initialize early stopping tracking variables
         self.best_metric = None
@@ -328,118 +330,54 @@ class BaseTrainer:
         val_metric = checkpoint[f"val_{self.config.params.metric}"]
         return epoch, train_loss, val_loss, val_metric
 
-    def _should_save_checkpoint(self, epoch, val_metric):
+    def _save_checkpoint(self, epoch, train_loss, val_loss, val_metric, is_new_best=False):
         """
-        Intelligently determine whether a checkpoint should be saved to avoid unnecessary I/O.
-
-        We save a checkpoint if:
-        1. save_top_k_checkpoints is None (save all)
-        2. We haven't saved k checkpoints yet
-        3. This checkpoint is better than the worst we currently have
-
-        This approach dramatically reduces I/O by only saving when we know the checkpoint
-        will be kept.
-
-        Parameters
-        ----------
-        epoch : int
-            The current epoch number
-        val_metric : float
-            The validation metric value for this epoch
-
-        Returns
-        -------
-        bool
-            True if checkpoint should be saved, False otherwise
+        Save checkpoint following a simple policy:
+        - Always save the latest checkpoint (if enabled)  
+        - Save the best checkpoint when a new best is found (if enabled)
+        - Clean up old epoch files to avoid clutter (only keep latest)
         """
-        if self.save_top_k_checkpoints is None:
-            return True  # Save all checkpoints
-
-        # Always save the first checkpoint
-        if len(self.checkpoint_heap) == 0:
-            return True
-
-        # If we haven't reached the limit, always save
-        if len(self.checkpoint_heap) < self.save_top_k_checkpoints:
-            return True
-
-        # Check if this checkpoint is better than the worst in our current top-k
-        heap_value = -val_metric if self.early_stopping_mode == "max" else val_metric
-
-        # Find the worst checkpoint in our current heap
-        worst_in_heap = max(self.checkpoint_heap)[0]  # Get the worst value from heap
-
-        # Only save if this checkpoint is better than the worst
-        is_better_than_worst = heap_value < worst_in_heap
-
-        return is_better_than_worst
-
-    def _cleanup_old_checkpoints(self, epoch, val_metric):
-        """
-        Add the saved checkpoint to our heap and remove the worst one if necessary.
-        Only called after a checkpoint has been saved.
-
-        Parameters
-        ----------
-        epoch : int
-            The current epoch number
-        val_metric : float
-            The validation metric value for this epoch
-        """
-        if self.save_top_k_checkpoints is None:
-            return  # Keep all checkpoints
-
-        checkpoint_path = f"{self.config.output_dir}/checkpoints/epoch_{epoch}.pt"
-        heap_value = -val_metric if self.early_stopping_mode == "max" else val_metric
-
-        # Add current checkpoint to heap
-        heapq.heappush(self.checkpoint_heap, (heap_value, epoch, checkpoint_path))
-        self.last_checkpoint_epoch = epoch
-
-        # If we have more checkpoints than allowed, remove the worst one
-        if len(self.checkpoint_heap) > self.save_top_k_checkpoints:
-            worst_value, worst_epoch, worst_path = heapq.heappop(self.checkpoint_heap)
-
-            # Remove the worst checkpoint file
-            try:
-                if os.path.exists(worst_path):
-                    os.remove(worst_path)
-                    actual_metric = (
-                        -worst_value
-                        if self.early_stopping_mode == "max"
-                        else worst_value
-                    )
-                    print(
-                        f"Removed old checkpoint: epoch_{worst_epoch}.pt (metric: {actual_metric:.6f})"
-                    )
-            except OSError as e:
-                print(f"Warning: Could not remove checkpoint {worst_path}: {e}")
-
-    def _save_checkpoint(self, epoch, train_loss, val_loss, val_metric):
-        """
-        Save checkpoint only if it should be saved according to the top-k policy.
-        This avoids unnecessary disk I/O for checkpoints that won't be kept.
-        """
-        if not self._should_save_checkpoint(epoch, val_metric):
-            print(
-                f"Skipping checkpoint save for epoch {epoch} (metric: {val_metric:.6f}) - not better than current top-{self.save_top_k_checkpoints}"
-            )
-            return
-
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": self.model.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-                f"val_{self.config.params.metric}": val_metric,
-            },
-            f"{self.config.output_dir}/checkpoints/epoch_{epoch}.pt",
-        )
-
-        # Update our heap and clean up if needed
-        self._cleanup_old_checkpoints(epoch, val_metric)
+        checkpoint_data = {
+            "epoch": epoch,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            f"val_{self.config.params.metric}": val_metric,
+        }
+        
+        checkpoints_to_save = []
+        
+        # Save best checkpoint if this is the new best
+        if self.save_best_checkpoint and is_new_best:
+            best_path = f"{self.config.output_dir}/checkpoints/best_checkpoint.pt"
+            torch.save(checkpoint_data, best_path)
+            self.best_checkpoint_path = best_path
+            checkpoints_to_save.append("best")
+        
+        # Save latest checkpoint (always, if enabled)
+        if self.save_latest_checkpoint:
+            latest_path = f"{self.config.output_dir}/checkpoints/latest_checkpoint.pt"
+            torch.save(checkpoint_data, latest_path)
+            
+            # Also save with epoch number for reference
+            epoch_path = f"{self.config.output_dir}/checkpoints/epoch_{epoch}.pt"
+            torch.save(checkpoint_data, epoch_path)
+            
+            # Clean up old epoch files (keep only the latest)
+            if hasattr(self, 'last_epoch_path') and self.last_epoch_path and os.path.exists(self.last_epoch_path):
+                try:
+                    os.remove(self.last_epoch_path)
+                except OSError:
+                    pass  # Don't warn for epoch file cleanup
+            
+            self.latest_checkpoint_path = latest_path
+            self.last_epoch_path = epoch_path
+            checkpoints_to_save.append("latest")
+        
+        if checkpoints_to_save:
+            save_types = " + ".join(checkpoints_to_save)
+            print(f"Saved checkpoint for epoch {epoch} ({save_types}): metric={val_metric:.6f}")
 
         return
 
@@ -489,17 +427,21 @@ class BaseTrainer:
 
         Returns
         -------
-        bool
-            True if training should stop, False otherwise.
+        tuple
+            (should_stop: bool, is_new_best: bool)
+            - should_stop: True if training should stop, False otherwise
+            - is_new_best: True if this epoch achieved a new best metric
         """
         if self.early_stopping_patience is None:
-            return False
+            return False, False
 
+        is_new_best = False
         if self.best_metric is None:
             self.best_metric = val_metric
             self.best_epoch = epoch
             self.patience_counter = 0
-            return False
+            is_new_best = True
+            return False, is_new_best
 
         # Check if current metric is better than best
         improved = False
@@ -514,6 +456,7 @@ class BaseTrainer:
             self.best_metric = val_metric
             self.best_epoch = epoch
             self.patience_counter = 0
+            is_new_best = True
             print(f"Validation metric improved to {val_metric:.6f} at epoch {epoch}")
         else:
             self.patience_counter += 1
@@ -528,9 +471,9 @@ class BaseTrainer:
             print(
                 f"Best metric {self.best_metric:.6f} was achieved at epoch {self.best_epoch}"
             )
-            return True
+            return True, is_new_best
 
-        return False
+        return False, is_new_best
 
     def _calculate_metric(self, y_true, y_pred) -> List[float]:
         """
@@ -710,8 +653,11 @@ class BaseTrainer:
             val_loss, val_metrics = self.validate(val_loader)
             val_metric = val_metrics[0]
 
-            # save epoch in output dir
-            self._save_checkpoint(epoch, train_loss, val_loss, val_metric)
+            # Check for early stopping to determine if this is a new best
+            should_stop, is_new_best = self._check_early_stopping(val_metric, epoch)
+            
+            # save epoch in output dir  
+            self._save_checkpoint(epoch, train_loss, val_loss, val_metric, is_new_best)
             # log losses to csv
             self._log_loss(epoch, train_loss, val_loss, val_metric)
             # log to wandb
@@ -720,8 +666,8 @@ class BaseTrainer:
                 f"Epoch: {epoch}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val {self.config.params.metric}: {val_metric:.4f}"
             )
 
-            # Check for early stopping
-            if self._check_early_stopping(val_metric, epoch):
+            # Stop if early stopping condition is met
+            if should_stop:
                 print(f"Early stopping at epoch {epoch}")
                 self.early_stopped = True
                 break
@@ -729,7 +675,7 @@ class BaseTrainer:
         if not self.early_stopped and self.early_stopping_patience is not None:
             print(f"Training completed normally after {epochs} epochs")
 
-        # Pass the best checkpoint if early stopping occurred
+        # Pass the best checkpoint if early stopping occurred, otherwise use latest
         test_checkpoint = None
         if (
             hasattr(self, "early_stopped")
@@ -737,7 +683,7 @@ class BaseTrainer:
             and hasattr(self, "best_epoch")
             and self.best_epoch is not None
         ):
-            # Create a checkpoint DataFrame for the best epoch
+            # Create a checkpoint DataFrame for the best epoch for compatibility
             df = pd.read_csv(f"{self.config.output_dir}/losses.csv")
             best_row = df[df["Epoch"] == self.best_epoch]
             if len(best_row) > 0:
@@ -906,13 +852,45 @@ class BaseTrainer:
                 ).T.reset_index(drop=True)
         # print('before load checkpoint', )
         # print(self.model.state_dict()['conv2.1.bias'])
-        # load checkpoint
-        print(
-            f"Best checkpoint: {self.config.output_dir}/checkpoints/epoch_{int(checkpoint['Epoch'].iloc[0])}.pt"
-        )
-        epoch, train_loss, val_loss, val_metric = self._load_checkpoint(
-            f"{self.config.output_dir}/checkpoints/epoch_{int(checkpoint['Epoch'].iloc[0])}.pt"
-        )
+        # load checkpoint - try best first, then latest, then epoch-specific
+        checkpoint_path = None
+        
+        if checkpoint is not None:
+            # Use the specified checkpoint epoch
+            requested_epoch = int(checkpoint['Epoch'].iloc[0])
+            epoch_path = f"{self.config.output_dir}/checkpoints/epoch_{requested_epoch}.pt"
+            if os.path.exists(epoch_path):
+                checkpoint_path = epoch_path
+        
+        # Try to load best checkpoint first
+        if checkpoint_path is None:
+            best_path = f"{self.config.output_dir}/checkpoints/best_checkpoint.pt"
+            if os.path.exists(best_path):
+                checkpoint_path = best_path
+                print("Using best_checkpoint.pt")
+            
+        # Fallback to latest checkpoint
+        if checkpoint_path is None:
+            latest_path = f"{self.config.output_dir}/checkpoints/latest_checkpoint.pt"
+            if os.path.exists(latest_path):
+                checkpoint_path = latest_path
+                print("Using latest_checkpoint.pt")
+        
+        # Final fallback: find any available checkpoint
+        if checkpoint_path is None:
+            checkpoint_dir = f"{self.config.output_dir}/checkpoints/"
+            if os.path.exists(checkpoint_dir):
+                for f in os.listdir(checkpoint_dir):
+                    if f.endswith('.pt'):
+                        checkpoint_path = f"{checkpoint_dir}{f}"
+                        print(f"Using available checkpoint: {f}")
+                        break
+        
+        if checkpoint_path is None:
+            raise FileNotFoundError(f"No valid checkpoints found in {self.config.output_dir}/checkpoints/")
+        
+        print(f"Loading checkpoint: {checkpoint_path}")
+        epoch, train_loss, val_loss, val_metric = self._load_checkpoint(checkpoint_path)
         print(
             f"Loaded checkpoint from epoch {epoch}, train loss: {train_loss:.3f}, val loss: {val_loss:.3f}, Val {self.config.params.metric}: {np.mean(val_metric):.3f}"
         )

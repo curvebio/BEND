@@ -48,8 +48,8 @@ data:
   parent_dir: ./data/
   data_dir : ${data.parent_dir}/${task}/${embedder}/
   cross_validation : false
-  batch_size : 256
-  num_workers : 32
+  batch_size : 4096 #256
+  num_workers : 16 #32
   padding_value : -100
   shuffle : 200
 params:
@@ -65,7 +65,6 @@ params:
   early_stopping_patience: 15
   early_stopping_min_delta: 0.0
   early_stopping_mode: "max"
-  save_top_k_checkpoints: 3 
   device_id: null # GPU device ID to use (e.g., 0, 1, 2, etc.), null for auto-selection
   random_seed: 0  # Random seed for reproducibility (default: 0)
   # AMP Configuration - Choose one:

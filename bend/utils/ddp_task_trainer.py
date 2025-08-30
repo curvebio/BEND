@@ -148,6 +148,19 @@ class DDPTrainer:
             self.patience_counter = 0
             self.early_stopped = False
 
+            # Simplified checkpoint management - only save best and latest
+            self.save_best_checkpoint = getattr(
+                self.config.params, "save_best_checkpoint", True
+            )
+            self.save_latest_checkpoint = getattr(
+                self.config.params, "save_latest_checkpoint", True
+            )
+            
+            # Track checkpoint paths for cleanup
+            self.best_checkpoint_path = None
+            self.latest_checkpoint_path = None
+            self.last_epoch_path = None
+
         # Only create output directory on main process
         if self.is_main_process:
             self._create_output_dir(self.config.output_dir)
@@ -197,8 +210,13 @@ class DDPTrainer:
         val_metric = checkpoint[f"val_{self.config.params.metric}"]
         return epoch, train_loss, val_loss, val_metric
 
-    def _save_checkpoint(self, epoch, train_loss, val_loss, val_metric):
-        """Save checkpoint (only on main process)."""
+    def _save_checkpoint(self, epoch, train_loss, val_loss, val_metric, is_new_best=False):
+        """
+        Save checkpoint following a simple policy (only on main process):
+        - Always save the latest checkpoint (if enabled)  
+        - Save the best checkpoint when a new best is found (if enabled)
+        - Clean up old epoch files to avoid clutter (only keep latest)
+        """
         if not self.is_main_process:
             return
 
@@ -208,17 +226,47 @@ class DDPTrainer:
         else:
             model_state_dict = self.model.state_dict()
 
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model_state_dict,
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-                f"val_{self.config.params.metric}": val_metric,
-            },
-            f"{self.config.output_dir}/checkpoints/epoch_{epoch}.pt",
-        )
+        checkpoint_data = {
+            "epoch": epoch,
+            "model_state_dict": model_state_dict,
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            f"val_{self.config.params.metric}": val_metric,
+        }
+        
+        checkpoints_to_save = []
+        
+        # Save best checkpoint if this is the new best
+        if self.save_best_checkpoint and is_new_best:
+            best_path = f"{self.config.output_dir}/checkpoints/best_checkpoint.pt"
+            torch.save(checkpoint_data, best_path)
+            self.best_checkpoint_path = best_path
+            checkpoints_to_save.append("best")
+        
+        # Save latest checkpoint (always, if enabled)
+        if self.save_latest_checkpoint:
+            latest_path = f"{self.config.output_dir}/checkpoints/latest_checkpoint.pt"
+            torch.save(checkpoint_data, latest_path)
+            
+            # Also save with epoch number for reference
+            epoch_path = f"{self.config.output_dir}/checkpoints/epoch_{epoch}.pt"
+            torch.save(checkpoint_data, epoch_path)
+            
+            # Clean up old epoch files (keep only the latest)
+            if hasattr(self, 'last_epoch_path') and self.last_epoch_path and os.path.exists(self.last_epoch_path):
+                try:
+                    os.remove(self.last_epoch_path)
+                except OSError:
+                    pass  # Don't warn for epoch file cleanup
+            
+            self.latest_checkpoint_path = latest_path
+            self.last_epoch_path = epoch_path
+            checkpoints_to_save.append("latest")
+        
+        if checkpoints_to_save:
+            save_types = " + ".join(checkpoints_to_save)
+            print(f"Saved checkpoint for epoch {epoch} ({save_types}): metric={val_metric:.6f}")
 
     def _log_loss(self, epoch, train_loss, val_loss, val_metric):
         """Log losses to CSV (only on main process)."""
@@ -270,17 +318,21 @@ class DDPTrainer:
 
         Returns
         -------
-        bool
-            True if training should stop, False otherwise.
+        tuple
+            (should_stop: bool, is_new_best: bool)
+            - should_stop: True if training should stop, False otherwise
+            - is_new_best: True if this epoch achieved a new best metric
         """
         if not self.is_main_process or self.early_stopping_patience is None:
-            return False
+            return False, False
 
+        is_new_best = False
         if self.best_metric is None:
             self.best_metric = val_metric
             self.best_epoch = epoch
             self.patience_counter = 0
-            return False
+            is_new_best = True
+            return False, is_new_best
 
         # Check if current metric is better than best
         improved = False
@@ -295,6 +347,7 @@ class DDPTrainer:
             self.best_metric = val_metric
             self.best_epoch = epoch
             self.patience_counter = 0
+            is_new_best = True
             print(f"Validation metric improved to {val_metric:.6f} at epoch {epoch}")
         else:
             self.patience_counter += 1
@@ -309,9 +362,9 @@ class DDPTrainer:
             print(
                 f"Best metric {self.best_metric:.6f} was achieved at epoch {self.best_epoch}"
             )
-            return True
+            return True, is_new_best
 
-        return False
+        return False, is_new_best
 
     def _calculate_metric(self, y_true, y_pred) -> List[float]:
         """
@@ -628,7 +681,7 @@ class DDPTrainer:
             val_metric = val_metrics[0] if val_metrics else 0.0
 
             # Save checkpoint, log losses, and log to wandb only on main process
-            self._save_checkpoint(epoch, train_loss, val_loss, val_metric)
+            self._save_checkpoint(epoch, train_loss, val_loss, val_metric, is_new_best)
             self._log_loss(epoch, train_loss, val_loss, val_metric)
             self._log_wandb(epoch, train_loss, val_loss, val_metric)
 
@@ -639,8 +692,9 @@ class DDPTrainer:
 
             # Check for early stopping (only on main process)
             early_stop = False
+            is_new_best = False
             if self.is_main_process:
-                early_stop = self._check_early_stopping(val_metric, epoch)
+                early_stop, is_new_best = self._check_early_stopping(val_metric, epoch)
                 if early_stop:
                     self.early_stopped = True
                     print(f"Early stopping at epoch {epoch}")

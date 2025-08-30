@@ -43,8 +43,8 @@ optimizer :
   weight_decay: 0.01
 data:
   _target_: bend.utils.data_downstream.get_data
-  batch_size : 8
-  num_workers : 2
+  batch_size : 64
+  num_workers : 0
   padding_value : -100
   shuffle : 100
   parent_dir: ./data/
@@ -65,7 +65,6 @@ params:
   early_stopping_patience: 15
   early_stopping_min_delta: 0.0
   early_stopping_mode: "max"
-  save_top_k_checkpoints: 3 
   random_seed: 0  # Random seed for reproducibility (default: 0)
   # AMP Configuration - Choose one:
   # "auto" - automatically select best option based on hardware (default)
