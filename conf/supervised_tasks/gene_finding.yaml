@@ -26,7 +26,9 @@ hydra :
                  awdlstm,
                  resnet-supervised,
                  nt_transformer_v2_500m,
-                 grover
+                 grover,
+                 dnabert2-bs-seq,
+                 hyenadna-bs-seq
 task : gene_finding 
 embedder : onehot
 output_dir: ./downstream_tasks/${task}/${embedder}/
@@ -44,7 +46,7 @@ data:
   _target_: bend.utils.data_downstream.get_data
   cross_validation : false
   batch_size : 256
-  num_workers : 4
+  num_workers : 0
   padding_value : -100
   shuffle : 1000
   parent_dir : ./data

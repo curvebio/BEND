@@ -13,3 +13,5 @@ datadims:
   convnet: 256
   dnabert6: 768
   awdlstm: 64
+  dnabert2-bs-seq: 768
+  # hyenadna-bs-seq: 768
