@@ -12,7 +12,7 @@ hydra :
       model: 
         # dnabert2,
         dnabert2-bs-seq,
-        # hyenadna-bs-seq,
+        hyenadna-bs-seq
         # hyenadna-medium-160k
             #  grover
              #hyenadna-small-32k,
@@ -40,11 +40,11 @@ hydra :
             gene_finding,
             enhancer_annotation,
             histone_modification,
-            chromatin_accessibility
+            chromatin_accessibility,
             cpg_methylation
             # variant_effects,
 
-chunk_size : 50000
+chunk_size : 10000
 chunk : null # can be given as a list of chunks to embed 
 data_dir : ./data/
 embedders_dir : ./pretrained_models/

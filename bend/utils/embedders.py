@@ -972,6 +972,7 @@ class HyenaDNAEmbedder(BaseEmbedder):
             "hyenadna-medium-160k-seqlen": 160000,
             "hyenadna-medium-450k-seqlen": 450000,
             "hyenadna-large-1m-seqlen": 1_000_000,
+            "hyenadna-bs-seq": 160000,
         }
 
         self.max_length = max_lengths[model_name]  # auto selects
@@ -999,30 +1000,37 @@ class HyenaDNAEmbedder(BaseEmbedder):
         # otherwise we'll load the HF one in None
         backbone_cfg = None
 
-        is_git_lfs_repo = os.path.exists(".git/hooks/pre-push")
-        # use the pretrained Huggingface wrapper instead
-        model = HyenaDNAPreTrainedModel.from_pretrained(
-            checkpoint_path,
-            model_name,
-            download=not os.path.exists(model_path),
-            config=backbone_cfg,
-            device=self.device,
-            use_head=use_head,
-            use_lm_head=use_lm_head,
-            n_classes=n_classes,
-        )
-        model.eval()
+        # Check if this is a Transformers-format model or original HyenaDNA format
+        if os.path.exists(os.path.join(model_path, "pytorch_model.bin")) and os.path.exists(os.path.join(model_path, "config.json")):
+            # This is a Transformers-format model, load directly
+            from transformers import AutoModel
+            model = AutoModel.from_pretrained(model_path, trust_remote_code=True)
+            model.eval()
+        else:
+            # This is original HyenaDNA format, use the custom loader
+            is_git_lfs_repo = os.path.exists(".git/hooks/pre-push")
+            model = HyenaDNAPreTrainedModel.from_pretrained(
+                checkpoint_path,
+                model_name,
+                download=not os.path.exists(model_path),
+                config=backbone_cfg,
+                device=self.device,
+                use_head=use_head,
+                use_lm_head=use_lm_head,
+                n_classes=n_classes,
+            )
+            model.eval()
+            
+            # NOTE the git lfs download command will add this,
+            # but we actually dont use LFS for BEND itself.
+            if not is_git_lfs_repo:
+                try:
+                    os.remove(".git/hooks/pre-push")
+                except FileNotFoundError:
+                    pass
 
         model.to(self.device)
         self.model = model
-
-        # NOTE the git lfs download command will add this,
-        # but we actually dont use LFS for BEND itself.
-        if not is_git_lfs_repo:
-            try:
-                os.remove(".git/hooks/pre-push")
-            except FileNotFoundError:
-                pass
 
         # create tokenizer - NOTE this adds CLS and SEP tokens when add_special_tokens=False
         self.tokenizer = CharacterTokenizer(
@@ -1086,6 +1094,15 @@ class HyenaDNAEmbedder(BaseEmbedder):
                     tok_seq = tok_seq.to(self.device)
 
                     output = self.model(tok_seq)
+
+                    # Handle different output formats
+                    if hasattr(output, 'last_hidden_state'):
+                        # Transformers model output
+                        output = output.last_hidden_state
+                    elif isinstance(output, tuple):
+                        # Some models return tuples
+                        output = output[0]
+                    # else: assume it's already a tensor (original HyenaDNA format)
 
                     if self.return_loss and remove_special_tokens:
                         # vocab:
