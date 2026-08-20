@@ -316,7 +316,15 @@ class BaseTrainer:
         return
 
     def _load_checkpoint(self, checkpoint):
-        checkpoint = torch.load(checkpoint, map_location=self.device)
+        # weights_only=False: this reloads a checkpoint BaseTrainer itself
+        # just wrote one line earlier in the same run. It's self-trusted,
+        # not an arbitrary external file. PyTorch >=2.6 flipped torch.load's
+        # default to weights_only=True, which rejects the numpy scalar
+        # globals this checkpoint's state dict contains. Same bug class
+        # already fixed once on the BEND-aaronmorales fork (HyenaDNA's
+        # torch.load(weights_only=False) fix). Different call site, same
+        # root cause.
+        checkpoint = torch.load(checkpoint, map_location=self.device, weights_only=False)
         try:
             self.model.load_state_dict(checkpoint["model_state_dict"], strict=True)
         except:
