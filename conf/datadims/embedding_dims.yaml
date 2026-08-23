@@ -1,4 +1,7 @@
 onehot: 5
+# Same architecture as dnabert2. Continued pretraining doesn't change
+# hidden_size, confirmed against this checkpoint's own config.json.
+dnabert2-curve-cpt-100k: 768
 resnet-supervised : 256
 basset-supervised : 5
 gpn: 512
