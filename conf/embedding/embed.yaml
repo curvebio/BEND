@@ -152,6 +152,18 @@ grover:
   model_name: ${embedders_dir}/grover/
   upsample_embeddings: true
   device_id : ${device_id}
+# Caduceus (Schiff et al., https://arxiv.org/abs/2403.03234), 2 variants.
+# Requires mamba-ssm==1.2.0.post1, not installed by default (see
+# bootstrap_env.sh). Caduceus embeddings are already the same length as
+# the input, no upsample_embeddings key needed.
+caduceus-ps:
+  _target_ : bend.utils.embedders.CaduceusEmbedder
+  model_name : kuleshov-group/caduceus-ps_seqlen-131k_d_model-256_n_layer-16
+  device_id : ${device_id}
+caduceus-ph:
+  _target_ : bend.utils.embedders.CaduceusEmbedder
+  model_name : kuleshov-group/caduceus-ph_seqlen-131k_d_model-256_n_layer-16
+  device_id : ${device_id}
 # data configurations for each task
 gene_finding:
   reference_fasta : ${data_dir}/genomes/GRCh38.primary_assembly.genome.fa

@@ -25,3 +25,6 @@ nt_transformer_v2_500m: 1024
 grover: 768
 dnabert2-bs-seq: 768
 hyenadna-bs-seq: 256
+# d_model-256 per the checkpoint name, both variants.
+caduceus-ps: 256
+caduceus-ph: 256
