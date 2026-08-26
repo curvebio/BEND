@@ -131,6 +131,17 @@ nt_transformer_1000g:
 onehot:
   _target_ : bend.utils.embedders.OneHotEmbedder
   device_id : ${device_id}
+# Curve's own continued-pretraining checkpoint of DNABERT-2-117M, 100k
+# steps. Local only, not on HF Hub. Pull it first:
+#   shared/pull_store.sh bend pretrained_models dnabert2-curve-cpt/checkpoint-100000
+# Only the inference files are included (config.json, pytorch_model.bin,
+# tokenizer*). Training-resume state (optimizer.pt, scheduler.pt,
+# rng_state) was left out.
+dnabert2-curve-cpt-100k:
+  _target_ : bend.utils.embedders.DNABert2Embedder
+  model_name : ${embedders_dir}/dnabert2-curve-cpt/checkpoint-100000
+  upsample_embeddings : true
+  device_id : ${device_id}
 nt_transformer_v2_500m:
   _target_ : bend.utils.embedders.NucleotideTransformerEmbedder
   model_name: InstaDeepAI/nucleotide-transformer-v2-500m-multi-species
